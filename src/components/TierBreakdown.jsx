@@ -6,7 +6,7 @@
 const TIER_META = {
   tier1: { label: 'Tier 1', sub: 'Heuristic / Static',    color: '#58a6ff', desc: '17 signals — runs instantly, no model' },
   tier2: { label: 'Tier 2', sub: 'Statistical / Tokens',  color: '#d29922', desc: '5 signals — n-gram, Bayesian, MATTR'   },
-  tier3: { label: 'Tier 3', sub: 'ML Embedding',          color: '#bc8cff', desc: 'CodeBERT cosine similarity via WASM'   },
+  tier3: { label: 'Tier 3', sub: 'ML Classification',      color: '#bc8cff', desc: 'RoBERTa Large + Base ensemble via backend API' },
 };
 
 function TierCard({ id, tier }) {

@@ -4,8 +4,8 @@
  * TIER 3 — ML Classification via backend API
  *
  * Calls the Python/FastAPI backend which runs two RoBERTa-based models:
- *   - SuperAnnotate/ai-detector       (primary, RoBERTa Large)
- *   - roberta-base-openai-detector    (secondary, RoBERTa Base)
+ *   - roberta-large-openai-detector   (primary, RoBERTa Large, 355M params)
+ *   - roberta-base-openai-detector    (secondary, RoBERTa Base, 125M params)
  *
  * Keeps the same exported interface so the orchestrator (detector.js) needs
  * no changes:  mlClassify, getModelState, preloadModel, setStatusCallback
