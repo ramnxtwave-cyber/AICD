@@ -30,7 +30,7 @@ export async function analyzeCode(code, language, useML = true, onProgress = () 
 
   // ── Tier 1: Heuristics (synchronous, instant) ──────────────────────────────
   onProgress({ tier: 1, status: 'running' });
-  const t1Metrics = runTier1(code, lines);
+  const t1Metrics = runTier1(code, lines, language);
   const t1Score   = scoreTier1(t1Metrics);
   onProgress({ tier: 1, status: 'done', score: t1Score });
 
@@ -40,7 +40,7 @@ export async function analyzeCode(code, language, useML = true, onProgress = () 
   const t2Score   = scoreTier2(t2Metrics);
   onProgress({ tier: 2, status: 'done', score: t2Score });
 
-  // ── Tier 3: ML Model (async, may be unavailable) ───────────────────────────
+  // ── Tier 3: ML Model (async, calls backend API) ───────────────────────────
   let t3Result = { score: null, confidence: 0, available: false, reason: 'Not attempted' };
   if (useML) {
     onProgress({ tier: 3, status: 'running' });
@@ -68,7 +68,7 @@ export async function analyzeCode(code, language, useML = true, onProgress = () 
 
   const lineResults = lines.map((line, i) => ({
     n: i + 1, text: line,
-    ...classifyLine(line, lines, i),
+    ...classifyLine(line, lines, i, language),
   }));
 
   const aiLineCount    = lineResults.filter(l => l.status === 'ai').length;
@@ -86,7 +86,7 @@ export async function analyzeCode(code, language, useML = true, onProgress = () 
       tier3: { score: t3Result.score, weight: tier_weights.t3, metrics: t3Result,  available: t3Result.available },
     },
     lines:     lineResults,
-    groups:    buildGroups(lineResults, lines),
+    groups:    buildGroups(lineResults),
     codeLines: lines,
     language,
   };

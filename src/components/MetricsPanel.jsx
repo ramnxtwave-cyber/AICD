@@ -83,6 +83,8 @@ export function MetricsPanel({ tiers }) {
         <MetricRow label="Magic number usage"        value={m1.magic_numbers}         hint="High = named constants = AI"       isAILike={m1.magic_numbers > 55}          />
         <MetricRow label="Identifier entropy"        value={m1.entropy}               hint="Low = repetitive vocabulary"       isAILike={m1.entropy < 50}                />
         <MetricRow label="Type-token ratio"          value={m1.type_token_ratio}      hint="Low = narrow vocabulary = AI"      isAILike={m1.type_token_ratio < 55}       />
+        <MetricRow label="Guard clause density"     value={m1.guard_clauses}         hint="High = validates every input"      isAILike={m1.guard_clauses > 55}          />
+        <MetricRow label="Error msg verbosity"      value={m1.error_verbosity}       hint="High = long descriptive errors"   isAILike={m1.error_verbosity > 55}        />
       </Section>
       {divider}
 
