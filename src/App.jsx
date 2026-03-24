@@ -30,13 +30,14 @@ export default function App() {
   const [stageIdx,    setStageIdx]   = useState(0);
   const [result,      setResult]     = useState(null);
   const [error,       setError]      = useState("");
-  const [mlEnabled,   setMlEnabled]  = useState(false);
+  const [mlEnabled,   setMlEnabled]  = useState(true);
   const [modelState,  setModelState] = useState({ loading: false, ready: false, error: null });
 
   useEffect(() => {
     setStatusCallback(() => {
       setModelState(getModelState());
     });
+    preloadModel();
   }, []);
 
   const loadExample = useCallback((type) => {
@@ -159,17 +160,29 @@ export default function App() {
               </div>
             )}
 
-            {/* Scan button */}
-            <button
-              className={`scan-btn ${scanning ? 'scan-btn--scanning' : 'scan-btn--ready'}`}
-              onClick={runScan}
-              disabled={scanning}
-            >
-              {scanning
-                ? <><span style={{ animation: 'pulse 0.8s infinite', display: 'inline-block' }}>◉</span>  Analyzing…</>
-                : '▶  Start Detection'
-              }
-            </button>
+            {/* Scan button + ML toggle */}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'stretch' }}>
+              <button
+                className={`scan-btn ${scanning ? 'scan-btn--scanning' : 'scan-btn--ready'}`}
+                onClick={runScan}
+                disabled={scanning}
+              >
+                {scanning
+                  ? <><span style={{ animation: 'pulse 0.8s infinite', display: 'inline-block' }}>◉</span>  Analyzing…</>
+                  : '▶  Start Detection'
+                }
+              </button>
+              <button
+                className="ml-toggle"
+                onClick={toggleML}
+                title={mlEnabled ? 'ML Tier 3 is enabled — click to disable' : 'ML Tier 3 is disabled — click to enable'}
+              >
+                <span className={`ml-toggle__dot${modelState.loading ? ' ml-toggle__dot--loading' : modelState.ready ? ' ml-toggle__dot--ready' : modelState.error ? ' ml-toggle__dot--error' : ''}`} />
+                <span className="ml-toggle__label">
+                  {modelState.loading ? 'Loading…' : modelState.ready ? 'ML On' : modelState.error ? 'ML Err' : mlEnabled ? 'ML' : 'ML Off'}
+                </span>
+              </button>
+            </div>
 
             {/* Results */}
             {!scanning && result && (
@@ -211,12 +224,7 @@ export default function App() {
               <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <ScorePanel result={result} />
 
-                <TierBreakdown
-                  tiers={result.tiers}
-                  mlEnabled={mlEnabled}
-                  onToggleML={toggleML}
-                  modelState={modelState}
-                />
+                <TierBreakdown tiers={result.tiers} />
 
                 <MetricsPanel tiers={result.tiers} />
 

@@ -80,9 +80,8 @@ function TierCard({ id, tier }) {
   );
 }
 
-export function TierBreakdown({ tiers, mlEnabled, onToggleML, modelState }) {
+export function TierBreakdown({ tiers }) {
   if (!tiers) return null;
-  const { loading, ready, error } = modelState || {};
 
   return (
     <div style={{
@@ -92,7 +91,6 @@ export function TierBreakdown({ tiers, mlEnabled, onToggleML, modelState }) {
       background: 'var(--color-background-secondary)',
     }}>
       <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '12px 16px',
         borderBottom: '1px solid var(--color-border-tertiary)',
         background: 'var(--color-background-tertiary)',
@@ -104,26 +102,6 @@ export function TierBreakdown({ tiers, mlEnabled, onToggleML, modelState }) {
         }}>
           Tier Breakdown
         </span>
-        <button
-          onClick={onToggleML}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            background: mlEnabled ? 'rgba(188,140,255,0.12)' : 'var(--color-background-primary)',
-            color: mlEnabled ? '#bc8cff' : 'var(--color-text-tertiary)',
-            border: `1px solid ${mlEnabled ? 'rgba(188,140,255,0.3)' : 'var(--color-border-tertiary)'}`,
-            borderRadius: 20, padding: '4px 12px',
-            fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 500,
-            cursor: 'pointer', transition: 'all 0.2s',
-          }}
-        >
-          <span style={{
-            width: 7, height: 7, borderRadius: '50%',
-            background: loading ? '#d29922' : ready ? '#3fb950' : error ? '#f85149' : 'var(--color-text-tertiary)',
-            display: 'inline-block',
-            boxShadow: ready ? '0 0 6px rgba(63,185,80,0.5)' : 'none',
-          }} />
-          {loading ? 'Loading ML...' : ready ? 'ML Active' : error ? 'ML Error' : 'Enable ML'}
-        </button>
       </div>
 
       <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>

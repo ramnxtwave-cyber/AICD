@@ -295,6 +295,58 @@
   gap: 8px;
 }
 
+/* ── ML toggle ────────────────────────────────────────────────────────────── */
+.ml-toggle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 16px;
+  border: 1px solid rgba(188, 140, 255, 0.25);
+  border-radius: var(--border-radius-lg);
+  background: rgba(188, 140, 255, 0.08);
+  color: #bc8cff;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 72px;
+  flex-shrink: 0;
+}
+
+.ml-toggle:hover {
+  background: rgba(188, 140, 255, 0.14);
+  border-color: rgba(188, 140, 255, 0.4);
+}
+
+.ml-toggle__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+  transition: all 0.3s;
+}
+
+.ml-toggle__dot--loading {
+  background: #d29922;
+  animation: pulse 1s infinite;
+}
+
+.ml-toggle__dot--ready {
+  background: #3fb950;
+  box-shadow: 0 0 8px rgba(63, 185, 80, 0.6);
+}
+
+.ml-toggle__dot--error {
+  background: #f85149;
+}
+
+.ml-toggle__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
 /* ── Scan button ──────────────────────────────────────────────────────────── */
 .scan-btn {
   position: relative;
