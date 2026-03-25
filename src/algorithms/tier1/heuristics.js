@@ -4,7 +4,7 @@
  * TIER 1 — Heuristic / Static Analysis
  * Pure JavaScript, no model, no network. Runs instantly.
  *
- * 19 signals (17 original + 2 new), now language-aware.
+ * 20 signals (17 original + 3 new), now language-aware.
  */
 
 const KEYWORDS = new Set([
@@ -503,6 +503,18 @@ export function errorMessageVerbosity(text) {
   return 25;
 }
 
+// 20. Emoji Presence — high = AI
+// AI-generated code frequently sprinkles emojis in comments, log messages,
+// and string literals. Human-written production code almost never does.
+export function emojiPresence(text) {
+  const emojiRe = /\p{Extended_Pictographic}/gu;
+  const matches = text.match(emojiRe) || [];
+  if (matches.length === 0) return 0;
+  if (matches.length === 1) return 60;
+  if (matches.length <= 3) return 80;
+  return 95;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Per-line classifier (language-aware)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -584,6 +596,10 @@ export function classifyLine(line, allLines, idx, language) {
   const shortErr = t.match(/(raise|throw|Error|panic)\s*\(\s*["'`]([^"'`]{1,15})["'`]/);
   if (shortErr && !errMsg) humanSignals.push('terse error message');
 
+  // Emoji presence — strong AI indicator
+  if (/\p{Extended_Pictographic}/u.test(t))
+    aiSignals.push('emoji in code (AI pattern)');
+
   const total = aiSignals.length + humanSignals.length;
   if (total === 0) return { status: 'uncertain', confidence: 50, signals: [] };
   const aiRatio   = aiSignals.length / total;
@@ -619,31 +635,33 @@ export function runTier1(code, lines, language) {
     type_token_ratio:      typeTokenRatio(code),
     guard_clauses:         guardClauseDensity(lines, lp),
     error_verbosity:       errorMessageVerbosity(code),
+    emoji_presence:        emojiPresence(code),
   };
 }
 
 // Weighted score from Tier 1 metrics (0-100, high = AI)
 export function scoreTier1(m) {
   return Math.round(
-    (100 - m.entropy)          * 0.04 +
-    m.blank_density            * 0.04 +
-    m.naming_verbosity         * 0.05 +
+    (100 - m.entropy)          * 0.03 +
+    m.blank_density            * 0.03 +
+    m.naming_verbosity         * 0.04 +
     m.type_annotations         * 0.08 +
     m.docstring_coverage       * 0.07 +
     m.structural_regularity    * 0.09 +
     m.comment_absence          * 0.05 +
-    m.indent_consistency       * 0.03 +
+    m.indent_consistency       * 0.02 +
     m.exception_handling       * 0.05 +
-    m.import_organisation      * 0.04 +
+    m.import_organisation      * 0.03 +
     m.string_formatting        * 0.05 +
-    m.dead_code_absence        * 0.04 +
+    m.dead_code_absence        * 0.03 +
     m.variable_reuse           * 0.06 +
-    m.magic_numbers            * 0.04 +
+    m.magic_numbers            * 0.03 +
     m.complexity_uniformity    * 0.07 +
     m.halstead_uniformity      * 0.06 +
     (100 - m.type_token_ratio) * 0.06 +
     m.guard_clauses            * 0.05 +
-    m.error_verbosity          * 0.03
+    m.error_verbosity          * 0.02 +
+    m.emoji_presence           * 0.08
   );
 }
 
