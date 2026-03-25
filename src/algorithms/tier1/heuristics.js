@@ -19,6 +19,104 @@ const KEYWORDS = new Set([
   'val','fun','companion','override','abstract','final','protected',
 ]);
 
+// Standard library / builtin identifiers that should NOT count as verbose naming.
+// These are API names the developer has no control over.
+const STDLIB_NAMES = new Set([
+  // C++ STL
+  'push_back','pop_back','emplace_back','push_front','pop_front','emplace_front',
+  'find_first_of','find_last_of','find_first_not_of','find_last_not_of',
+  'upper_bound','lower_bound','equal_range','binary_search',
+  'make_pair','make_tuple','make_shared','make_unique','make_optional',
+  'to_string','to_wstring','stoi','stol','stod','stof',
+  'begin','end','rbegin','rend','cbegin','cend',
+  'front','back','size','empty','clear','erase','insert','resize','reserve',
+  'substr','getline','endl','cout','cerr','cin','printf','fprintf','sprintf',
+  'sort','swap','reverse','accumulate','transform','for_each','count_if',
+  'find_if','remove_if','copy_if','all_of','any_of','none_of',
+  'unique_ptr','shared_ptr','weak_ptr','dynamic_cast','static_cast','const_cast',
+  'string_view','initializer_list','numeric_limits','runtime_error','logic_error',
+  'invalid_argument','out_of_range','overflow_error','underflow_error',
+  'unordered_map','unordered_set','multimap','multiset',
+  'priority_queue','forward_list','bitset',
+  // Python builtins / stdlib
+  'isinstance','issubclass','enumerate','defaultdict','namedtuple','OrderedDict',
+  'dataclass','dataclasses','staticmethod','classmethod','abstractmethod',
+  'property','setattr','getattr','hasattr','delattr',
+  'startswith','endswith','splitlines','expandtabs','capitalize','casefold',
+  'maketrans','translate','isnumeric','isalpha','isdigit','isalnum',
+  'isspace','islower','isupper','istitle','isdecimal','isidentifier','isprintable',
+  'lstrip','rstrip','strip','ljust','rjust','zfill','removeprefix','removesuffix',
+  'format_map','__init__','__str__','__repr__','__len__','__eq__','__hash__',
+  '__enter__','__exit__','__iter__','__next__','__call__','__getitem__','__setitem__',
+  '__contains__','__add__','__sub__','__mul__','__truediv__','__floordiv__',
+  '__name__','__main__','__file__','__doc__','__dict__','__class__',
+  'traceback','format_exc','print_exc',
+  // JavaScript / DOM / Node
+  'addEventListener','removeEventListener','getElementById','getElementsByClassName',
+  'getElementsByTagName','querySelector','querySelectorAll',
+  'createElement','createTextNode','appendChild','removeChild','replaceChild',
+  'insertBefore','setAttribute','getAttribute','removeAttribute','hasAttribute',
+  'classList','className','innerHTML','innerText','textContent','outerHTML',
+  'parentNode','parentElement','childNodes','firstChild','lastChild',
+  'nextSibling','previousSibling','firstElementChild','lastElementChild',
+  'nextElementSibling','previousElementSibling',
+  'setTimeout','setInterval','clearTimeout','clearInterval','requestAnimationFrame',
+  'cancelAnimationFrame',
+  'preventDefault','stopPropagation','stopImmediatePropagation',
+  'addEventListener','dispatchEvent',
+  'hasOwnProperty','propertyIsEnumerable','isPrototypeOf',
+  'toString','valueOf','toFixed','toPrecision','toExponential',
+  'toUpperCase','toLowerCase','toLocaleLowerCase','toLocaleUpperCase',
+  'charCodeAt','codePointAt','fromCharCode','fromCodePoint',
+  'startsWith','endsWith','padStart','padEnd','trimStart','trimEnd',
+  'replaceAll','matchAll','lastIndexOf','indexOf','findIndex','findLast','findLastIndex',
+  'flatMap','reduceRight','copyWithin','toSorted','toReversed','toSpliced',
+  'localStorage','sessionStorage','getComputedStyle',
+  'readFileSync','writeFileSync','readFile','writeFile','existsSync','mkdirSync',
+  'createReadStream','createWriteStream',
+  'nextTick','prototype','constructor','defineProperty','defineProperties',
+  'getOwnPropertyDescriptor','getOwnPropertyNames','getOwnPropertySymbols',
+  'getPrototypeOf','setPrototypeOf','isExtensible','preventExtensions',
+  'freeze','isFrozen','seal','isSealed',
+  // Java
+  'toString','hashCode','equals','compareTo','indexOf','lastIndexOf',
+  'substring','charAt','toCharArray','getBytes','isEmpty',
+  'contains','containsKey','containsValue','keySet','entrySet','values',
+  'putIfAbsent','getOrDefault','computeIfAbsent','computeIfPresent',
+  'Collections','ArrayList','LinkedList','HashMap','TreeMap','LinkedHashMap',
+  'HashSet','TreeSet','LinkedHashSet','ArrayDeque','PriorityQueue',
+  'StringBuilder','StringBuffer','BigInteger','BigDecimal',
+  'parseInt','parseFloat','parseLong','parseDouble',
+  'getMessage','getStackTrace','printStackTrace','getCause',
+  'getClass','getName','getSimpleName','getCanonicalName',
+  'isInstance','isAssignableFrom','newInstance',
+  'Thread','Runnable','Callable','Future','CompletableFuture',
+  'ExecutorService','Executors','ThreadPoolExecutor',
+  'InputStream','OutputStream','BufferedReader','BufferedWriter',
+  'FileReader','FileWriter','InputStreamReader','OutputStreamWriter',
+  // Go
+  'Sprintf','Fprintf','Errorf','Println','Printf','Scanf',
+  'NewReader','NewWriter','NewScanner','NewBuffer',
+  'ReadAll','ReadFile','WriteFile','TempDir','TempFile',
+  'HandleFunc','ListenAndServe','NewServeMux','NewRequest',
+  'WithCancel','WithTimeout','WithDeadline','WithValue',
+  'Itoa','Atoi','FormatInt','FormatFloat','ParseInt','ParseFloat',
+  'HasPrefix','HasSuffix','TrimSpace','TrimLeft','TrimRight','TrimPrefix','TrimSuffix',
+  'Contains','ContainsAny','ContainsRune','EqualFold',
+  'ReplaceAll','SplitAfter','SplitAfterN',
+  // Rust
+  'unwrap','unwrap_or','unwrap_or_else','unwrap_or_default',
+  'expect','is_some','is_none','is_ok','is_err',
+  'map_err','and_then','or_else','ok_or','ok_or_else',
+  'iter','into_iter','iter_mut','collect','enumerate',
+  'to_owned','to_string','as_str','as_ref','as_mut',
+  'from_str','from_utf8','from_be_bytes','from_le_bytes',
+  'push_str','as_bytes','into_bytes',
+  'with_capacity','shrink_to_fit','truncate','drain','retain',
+  'read_to_string','read_to_end','write_all','flush',
+  'lock','try_lock','read','write',
+]);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Language-specific pattern configuration
 // ─────────────────────────────────────────────────────────────────────────────
@@ -167,7 +265,7 @@ export function namingVerbosity(lines, lp) {
     return t && !commentRe.test(t) && !t.startsWith('"""') && !t.startsWith("'''") && !t.startsWith('*');
   });
   const allIds = (codeLines.join('\n').match(/\b[a-z][a-zA-Z0-9_]{3,}\b/g) || [])
-    .filter(t => !KEYWORDS.has(t.toLowerCase()));
+    .filter(t => !KEYWORDS.has(t.toLowerCase()) && !STDLIB_NAMES.has(t));
   if (!allIds.length) return 20;
   const verbose = allIds.filter(id => id.length > 9 || (id.includes('_') && id.length > 6));
   return Math.min(100, Math.round((verbose.length / allIds.length) * 160));
@@ -235,7 +333,13 @@ export function inlineCommentAbsence(lines, lp) {
 }
 
 // 8. Indent Consistency — high = AI
-export function indentConsistency(lines) {
+// Languages where indentation is syntactically required (Python) or
+// auto-formatted by convention (Go via gofmt) get a neutral score — perfect
+// indentation there tells us nothing about human vs AI authorship.
+const INDENT_NEUTRAL_LANGS = new Set(['Python', 'Go']);
+
+export function indentConsistency(lines, language) {
+  if (INDENT_NEUTRAL_LANGS.has(language)) return 50;
   const indented = lines.filter(l => l.trim().length > 0);
   if (indented.length < 3) return 50;
   const indents = indented.map(l => l.match(/^(\s*)/)[1].length);
@@ -571,7 +675,7 @@ export function classifyLine(line, allLines, idx, language) {
 
   // Naming analysis
   const ids = t.match(/\b[a-z][a-zA-Z0-9_]{4,}\b/g) || [];
-  const verboseIds = ids.filter(i => !KEYWORDS.has(i) && (i.length > 12 || (i.includes('_') && i.length > 8)));
+  const verboseIds = ids.filter(i => !KEYWORDS.has(i) && !STDLIB_NAMES.has(i) && (i.length > 12 || (i.includes('_') && i.length > 8)));
   if (ids.length > 0 && verboseIds.length / ids.length > 0.4)
     aiSignals.push(`verbose naming: ${verboseIds.slice(0, 2).join(', ')}`);
 
@@ -623,7 +727,7 @@ export function runTier1(code, lines, language) {
     docstring_coverage:    docstringCoverage(lines, lp),
     structural_regularity: structuralRegularity(lines, lp),
     comment_absence:       inlineCommentAbsence(lines, lp),
-    indent_consistency:    indentConsistency(lines),
+    indent_consistency:    indentConsistency(lines, language),
     exception_handling:    exceptionHandlingStyle(code, lp),
     import_organisation:   importOrganisation(lines, lp),
     string_formatting:     stringFormattingStyle(code, lp),
