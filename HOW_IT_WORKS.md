@@ -29,15 +29,20 @@ The output is a score from 0 to 100, where higher means more AI-like.
 
 ### Tier 2 — Statistical Analysis
 
-This tier treats the code as **text** and applies statistical techniques to measure how predictable and uniform the writing is. AI-generated text has measurable statistical fingerprints that differ from human writing.
+This tier runs on the Python backend and applies statistical techniques to measure how predictable and uniform the writing is. AI-generated text has measurable statistical fingerprints that differ from human writing. If the backend is unavailable, a lighter JavaScript fallback runs in the browser.
+
+A key component is the **smart code tokenizer** that splits compound identifiers apart — `calculateOptimalRoute` becomes `["calculate", "optimal", "route"]` and `get_user_by_id` becomes `["get", "user", "by", "id"]`. This allows every technique below to analyze the actual vocabulary choices, not just opaque identifier strings.
 
 The techniques used:
 
-- **N-gram entropy** — Measures how predictable sequences of tokens are. AI code tends to produce lower entropy (more predictable patterns) because language models optimize for the most likely next token.
-- **Log-rank scoring** — Compares the code's vocabulary against two curated word lists: roughly 120 words that AI tends to favor (like "comprehensive", "robust", "utilize", "implementation") and 80 words that humans use more often (like "hack", "workaround", "kludge", "crap"). The balance between these drives the score.
-- **Token frequency histogram** — Inspired by the GLTR method from MIT/Harvard. Measures how concentrated the vocabulary is. AI tends to reuse the same small set of common tokens, while humans use a broader, more varied vocabulary.
-- **Moving-average type-token ratio (MATTR)** — A sliding-window measure of vocabulary diversity. Low diversity across windows is a sign of AI generation.
-- **Bayesian feature detection** — Checks for specific patterns that are statistically associated with AI, such as JSDoc-style documentation blocks, trailing commas, step-numbered comments ("Step 1:", "Step 2:"), and overly formal error messages.
+- **N-gram entropy (NLTK)** — Uses NLTK's word tokenizer for proper tokenization, then computes Shannon entropy over bigrams. Punctuation tokens are filtered out to avoid noise from code syntax. Normalized by log2(unique_ngram_count) — the correct theoretical maximum. AI code tends to produce lower entropy (more predictable patterns).
+- **Log-rank scoring (610K word-frequency database)** — Combines three signals using a 610,000-word frequency database sourced from [harshnative/words-dataset](https://github.com/harshnative/words-dataset):
+  1. **Curated word-list matching** — ~120 words AI favours ("comprehensive", "initialize", "implement") vs ~90 words humans use ("tmp", "hack", "buggy", "TODO"). The smart tokenizer means `calculateOptimal` now matches "calculate" and "optimal" in the AI list.
+  2. **Dictionary coverage** — AI code uses real English words; human code uses abbreviations (tmp, cfg, buf) not found in the 610K word database.
+  3. **Formality** — AI prefers moderately rare but valid English words (frequency rank 5K–100K); humans stick to extremely common ones or jargon.
+- **Token frequency histogram (GLTR-inspired)** — Measures how concentrated the vocabulary is using the smart tokenizer. AI tends to reuse the same small set of common tokens, while humans use a broader, more varied vocabulary.
+- **Moving-average type-token ratio (taaled)** — Computed using the [taaled](https://github.com/LCR-ADS-Lab/TAALED) Python package, an academically validated lexical diversity tool. MATTR calculates the average type-token ratio across all 50-word sliding windows. Low diversity across windows is a sign of AI generation.
+- **Bayesian feature detection** — Checks for specific patterns that are statistically associated with AI or human authorship. Now **language-agnostic** at the core (formal vocabulary density, step-numbered comments, error message verbosity, TODO markers, abbreviated variables, debug prints, commented-out code) with **language-specific extras** for Python, JavaScript/TypeScript, Java, Go, Rust, and C++.
 
 The output is a score from 0 to 100, where higher means more AI-like.
 
