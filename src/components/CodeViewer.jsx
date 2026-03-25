@@ -97,6 +97,7 @@ export function CodeViewer({ result }) {
               text={l.text}
               status={l.status}
               confidence={l.confidence}
+              signals={l.signals}
             />
           ))}
         </div>

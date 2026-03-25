@@ -24,14 +24,16 @@ const TOKEN_COLORS = {
   plain   : "#c9d1d9",
 };
 
-export function CodeLine({ lineNum, text, status, confidence }) {
+export function CodeLine({ lineNum, text, status, confidence, signals = [] }) {
   const s = STATUS_STYLE[status] || STATUS_STYLE.uncertain;
   const b = BADGE_STYLE[status]  || BADGE_STYLE.uncertain;
   const tokens = tokeniseLine(text);
+  const tooltip = signals.length ? signals.join(' · ') : '';
 
   return (
     <div
       className="code-line"
+      title={tooltip}
       style={{
         display: "flex",
         alignItems: "flex-start",
@@ -75,6 +77,19 @@ export function CodeLine({ lineNum, text, status, confidence }) {
         padding: "4px 12px",
         flexShrink: 0,
       }}>
+        {signals.length > 0 && (
+          <span style={{
+            color: "var(--color-text-tertiary)",
+            fontSize: 9,
+            fontFamily: "var(--font-mono)",
+            maxWidth: 180,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}>
+            {signals[0]}
+          </span>
+        )}
         <span style={{
           background: b.bg,
           color: b.color,

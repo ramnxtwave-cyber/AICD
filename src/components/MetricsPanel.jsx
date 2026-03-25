@@ -66,6 +66,7 @@ export function MetricsPanel({ tiers }) {
       {divider}
 
       <Section title="Style & Naming">
+        <MetricRow label="Emoji presence"            value={m1.emoji_presence}        hint="High = emojis in code (strong AI)" isAILike={m1.emoji_presence > 30}         />
         <MetricRow label="Naming verbosity"          value={m1.naming_verbosity}      hint="High = long descriptive names"     isAILike={m1.naming_verbosity > 55}       />
         <MetricRow label="Blank line padding"        value={m1.blank_density}         hint="High = over-padded code"           isAILike={m1.blank_density > 50}          />
         <MetricRow label="Comment absence"           value={m1.comment_absence}       hint="High = no casual inline notes"     isAILike={m1.comment_absence > 60}        />
