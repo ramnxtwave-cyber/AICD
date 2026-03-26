@@ -9,7 +9,7 @@
  *
  * Zero API calls. All detection runs locally in the browser.
  */
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import "./App.css";
 
 import { LANGUAGES, SCAN_STAGES, EXAMPLES } from "./data/constants.js";
@@ -23,6 +23,44 @@ import { CodeViewer }       from "./components/CodeViewer.jsx";
 import { DetectionSummary } from "./components/DetectionSummary.jsx";
 import { PlainEnglishCard } from "./components/PlainEnglishCard.jsx";
 
+const PINECONE_API_KEY = "pcsk_69ch9a_RPQLUArtXyReUKk87f7grMHiBzmz2EBWoqhENNJFufkbCPJ4DWJ9hrfq1DzcDXN";
+const PINECONE_INDEX_NAME = "plagiarism-detector";
+
+const LANG_MAP = {
+  python: "Python",
+  javascript: "JavaScript",
+  java: "Java",
+  cpp: "C++",
+  c: "C",
+  csharp: "C#",
+};
+
+async function fetchSubmissionFromPinecone(submissionId) {
+  const descRes = await fetch(
+    `https://api.pinecone.io/indexes/${PINECONE_INDEX_NAME}`,
+    { headers: { "Api-Key": PINECONE_API_KEY, Accept: "application/json" } }
+  );
+  if (!descRes.ok) throw new Error(`Failed to describe index: ${descRes.status}`);
+  const { host } = await descRes.json();
+
+  const fetchRes = await fetch(
+    `https://${host}/vectors/fetch?ids=${encodeURIComponent(`sub_${submissionId}`)}`,
+    { headers: { "Api-Key": PINECONE_API_KEY, Accept: "application/json" } }
+  );
+  if (!fetchRes.ok) throw new Error(`Failed to fetch vector: ${fetchRes.status}`);
+  const data = await fetchRes.json();
+
+  const record = data.vectors?.[`sub_${submissionId}`];
+  if (!record?.metadata) throw new Error("Submission not found in database");
+
+  return {
+    code: record.metadata.code || "",
+    language: record.metadata.language || null,
+    studentId: record.metadata.studentId || null,
+    questionId: record.metadata.questionId || null,
+  };
+}
+
 export default function App() {
   const [language,    setLanguage]   = useState("Python");
   const [code,        setCode]       = useState("");
@@ -32,6 +70,9 @@ export default function App() {
   const [error,       setError]      = useState("");
   const [mlEnabled,   setMlEnabled]  = useState(true);
   const [modelState,  setModelState] = useState({ loading: false, ready: false, error: null });
+  const [fetchingSubmission, setFetchingSubmission] = useState(false);
+  const [submissionInfo, setSubmissionInfo] = useState(null);
+  const autoScanPending = useRef(false);
 
   useEffect(() => {
     setStatusCallback(() => {
@@ -39,6 +80,34 @@ export default function App() {
     });
     preloadModel();
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("id");
+    if (!id) return;
+
+    setFetchingSubmission(true);
+    setError("");
+    fetchSubmissionFromPinecone(id)
+      .then((sub) => {
+        setCode(sub.code);
+        const mappedLang = LANG_MAP[sub.language?.toLowerCase()] || "Python";
+        setLanguage(mappedLang);
+        setSubmissionInfo({ id, studentId: sub.studentId, questionId: sub.questionId });
+        autoScanPending.current = true;
+      })
+      .catch((err) => {
+        setError(`Failed to load submission "${id}": ${err.message}`);
+      })
+      .finally(() => setFetchingSubmission(false));
+  }, []);
+
+  useEffect(() => {
+    if (autoScanPending.current && code && !scanning && !fetchingSubmission) {
+      autoScanPending.current = false;
+      runScan();
+    }
+  }, [code, fetchingSubmission]);
 
   const loadExample = useCallback((type) => {
     const ex = EXAMPLES[type];
@@ -102,6 +171,24 @@ export default function App() {
             optional in-browser ML classification. Everything runs locally.
           </p>
         </div>
+
+        {fetchingSubmission && (
+          <div className="submission-banner submission-banner--loading">
+            <span style={{ animation: 'pulse 0.8s infinite', display: 'inline-block' }}>◉</span>
+            {' '}Loading submission from database…
+          </div>
+        )}
+
+        {submissionInfo && !fetchingSubmission && (
+          <div className="submission-banner submission-banner--info">
+            <span>📋</span>
+            <span>
+              Loaded submission <strong>{submissionInfo.id}</strong>
+              {submissionInfo.studentId && <> · Student: <strong>{submissionInfo.studentId}</strong></>}
+              {submissionInfo.questionId && <> · Question: <strong>{submissionInfo.questionId}</strong></>}
+            </span>
+          </div>
+        )}
 
         {/* Main grid */}
         <div className="main-grid">
