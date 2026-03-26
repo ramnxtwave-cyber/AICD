@@ -280,11 +280,16 @@ export function typeAnnotationScore(text, lp) {
 }
 
 // 5. Docstring / doc-comment Coverage — high = AI (language-aware)
+const CONSTRUCTOR_RE = /\b(__init__|constructor|new)\s*\(/;
+
 export function docstringCoverage(lines, lp) {
   if (!lp.fnDef) return 0;
   let entities = 0, documented = 0;
   for (let i = 0; i < lines.length; i++) {
-    if (!lp.fnDef.test(lines[i]) && !(lp.classDef && lp.classDef.test(lines[i]))) continue;
+    const isFn    = lp.fnDef.test(lines[i]);
+    const isClass = lp.classDef && lp.classDef.test(lines[i]);
+    if (!isFn && !isClass) continue;
+    if (isFn && CONSTRUCTOR_RE.test(lines[i])) continue;
     entities++;
     if (!lp.docOpen) continue;
     for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
@@ -303,7 +308,6 @@ export function structuralRegularity(lines, lp) {
   let canonical = 0;
   for (const { l, i } of methods) {
     const hasReturn = lp.returnType ? lp.returnType.test(l) : false;
-    // Reset lastIndex for global regexes
     if (lp.returnType) lp.returnType.lastIndex = 0;
     let hasDoc = false;
     if (lp.docOpen) {
@@ -312,7 +316,7 @@ export function structuralRegularity(lines, lp) {
         if (next) { hasDoc = lp.docOpen.test(next); break; }
       }
     }
-    if (hasReturn && hasDoc) canonical++;
+    if (hasReturn || hasDoc) canonical++;
   }
   return Math.round((canonical / methods.length) * 100);
 }
@@ -354,9 +358,11 @@ export function indentConsistency(lines, language) {
 export function exceptionHandlingStyle(text, lp) {
   const broadMatches = lp.exceptBroad ? (text.match(new RegExp(lp.exceptBroad.source, 'g')) || []).length : 0;
   const bareMatches  = lp.exceptBare  ? (text.match(new RegExp(lp.exceptBare.source, 'g'))  || []).length : 0;
-  const total = broadMatches + bareMatches;
+  const raiseMatches = (text.match(/\b(raise|throw|panic)\b/g) || []).length;
+  const structured = broadMatches + raiseMatches;
+  const total = structured + bareMatches;
   if (total === 0) return 30;
-  return Math.min(100, Math.round((broadMatches / total) * 100));
+  return Math.min(100, Math.round((structured / total) * 100));
 }
 
 // 10. Import Organisation — high = AI (language-aware)
@@ -577,7 +583,7 @@ export function guardClauseDensity(lines, lp) {
       }
       if (fnRe.test(lines[j])) break;
     }
-    if (guardCount >= 2) guardedFns++;
+    if (guardCount >= 1) guardedFns++;
   }
   if (fnCount < 2) return 40;
   const ratio = guardedFns / fnCount;
@@ -591,12 +597,12 @@ export function guardClauseDensity(lines, lp) {
 // AI: "Invalid input: expected a positive integer, got {x}"
 // Human: "bad input", "err", or no message at all
 export function errorMessageVerbosity(text) {
-  const errorStrings = text.match(/(raise|throw|Error|Exception|panic|Err)\s*\(\s*["'`]([^"'`]+)["'`]/g) || [];
+  const errorStrings = text.match(/(raise|throw|Error|Exception|panic|Err)\s*\(\s*[fbr]?["'`]([^"'`]+)["'`]/g) || [];
   if (errorStrings.length === 0) return 40;
 
   let verboseCount = 0;
   for (const s of errorStrings) {
-    const msg = s.match(/["'`]([^"'`]+)["'`]/);
+    const msg = s.match(/[fbr]?["'`]([^"'`]+)["'`]/);
     if (msg && msg[1].length > 30 && msg[1].split(' ').length >= 4) {
       verboseCount++;
     }
@@ -673,14 +679,17 @@ export function classifyLine(line, allLines, idx, language) {
       aiSignals.push('numbered step comment (AI pattern)');
   }
 
+  // Strip string literal contents so naming analysis only sees actual code identifiers
+  const codeOnly = t.replace(/(["'`])(?:(?!\1).)*\1/g, '$1$1');
+
   // Naming analysis
-  const ids = t.match(/\b[a-z][a-zA-Z0-9_]{4,}\b/g) || [];
+  const ids = codeOnly.match(/\b[a-z][a-zA-Z0-9_]{4,}\b/g) || [];
   const verboseIds = ids.filter(i => !KEYWORDS.has(i) && !STDLIB_NAMES.has(i) && (i.length > 12 || (i.includes('_') && i.length > 8)));
   if (ids.length > 0 && verboseIds.length / ids.length > 0.4)
     aiSignals.push(`verbose naming: ${verboseIds.slice(0, 2).join(', ')}`);
 
   const kw2 = new Set(['if','in','or','and','not','for','def','try','as','is','do','of','fn','go']);
-  const shorts = (t.match(/\b[a-z]{1,3}\b/g) || []).filter(i => !kw2.has(i));
+  const shorts = (codeOnly.match(/\b[a-z]{1,3}\b/g) || []).filter(i => !kw2.has(i));
   if (shorts.length >= 2)
     humanSignals.push(`abbreviated names: ${shorts.slice(0, 2).join(', ')}`);
 
@@ -693,11 +702,11 @@ export function classifyLine(line, allLines, idx, language) {
     humanSignals.push('TODO/FIXME comment');
 
   // Verbose error messages on this line
-  const errMsg = t.match(/(raise|throw|Error|Exception|panic)\s*\(\s*["'`]([^"'`]{30,})["'`]/);
+  const errMsg = t.match(/(raise|throw|Error|Exception|panic)\s*\(\s*[fbr]?["'`]([^"'`]{30,})["'`]/);
   if (errMsg) aiSignals.push('verbose error message (AI pattern)');
 
   // Short error messages
-  const shortErr = t.match(/(raise|throw|Error|panic)\s*\(\s*["'`]([^"'`]{1,15})["'`]/);
+  const shortErr = t.match(/(raise|throw|Error|panic)\s*\(\s*[fbr]?["'`]([^"'`]{1,15})["'`]/);
   if (shortErr && !errMsg) humanSignals.push('terse error message');
 
   // Emoji presence — strong AI indicator
@@ -748,24 +757,24 @@ export function scoreTier1(m) {
   return Math.round(
     (100 - m.entropy)          * 0.03 +
     m.blank_density            * 0.03 +
-    m.naming_verbosity         * 0.04 +
-    m.type_annotations         * 0.08 +
-    m.docstring_coverage       * 0.07 +
-    m.structural_regularity    * 0.09 +
-    m.comment_absence          * 0.05 +
-    m.indent_consistency       * 0.02 +
+    m.naming_verbosity         * 0.07 +
+    m.type_annotations         * 0.10 +
+    m.docstring_coverage       * 0.09 +
+    m.structural_regularity    * 0.06 +
+    m.comment_absence          * 0.07 +
+    m.indent_consistency       * 0.01 +
     m.exception_handling       * 0.05 +
-    m.import_organisation      * 0.03 +
-    m.string_formatting        * 0.05 +
-    m.dead_code_absence        * 0.03 +
+    m.import_organisation      * 0.04 +
+    m.string_formatting        * 0.03 +
+    m.dead_code_absence        * 0.05 +
     m.variable_reuse           * 0.06 +
     m.magic_numbers            * 0.03 +
     m.complexity_uniformity    * 0.07 +
     m.halstead_uniformity      * 0.06 +
     (100 - m.type_token_ratio) * 0.06 +
-    m.guard_clauses            * 0.05 +
-    m.error_verbosity          * 0.02 +
-    m.emoji_presence           * 0.08
+    m.guard_clauses            * 0.04 +
+    m.error_verbosity          * 0.04 +
+    m.emoji_presence           * 0.01
   );
 }
 

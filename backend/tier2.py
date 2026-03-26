@@ -26,11 +26,11 @@ _word_ranks: dict[str, int] = {}
 _resources_loaded = False
 
 WEIGHTS = {
-    "ngram_entropy":     0.20,   # inverted: low entropy → AI
-    "log_rank":          0.25,
+    "ngram_entropy":     0.10,   # inverted: low entropy → AI
+    "log_rank":          0.30,
     "token_histogram":   0.20,
-    "mattr":             0.15,   # inverted: low MATTR → AI
-    "bayesian_features": 0.20,
+    "mattr":             0.10,   # inverted: low MATTR → AI
+    "bayesian_features": 0.30,
 }
 
 
