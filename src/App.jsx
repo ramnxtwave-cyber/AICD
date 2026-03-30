@@ -160,7 +160,7 @@ async function submitCodeToBackend(
 }
 
 async function runDirectComparison(apiKey, { code1, code2, language }) {
-  const res = await fetch(`http://127.0.0.1:8080/compare-direct`, {
+  const res = await fetch(`${PLAG_BACKEND_URL}/compare-direct`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -169,8 +169,7 @@ async function runDirectComparison(apiKey, { code1, code2, language }) {
     body: JSON.stringify({ code1, code2, language }),
   });
   const data = await res.json();
-  if (!data.success)
-    throw new Error(data.error || "Direct comparison failed");
+  if (!data.success) throw new Error(data.error || "Direct comparison failed");
   return data;
 }
 
@@ -738,9 +737,16 @@ export default function App() {
                 className="merge-score-btn"
                 onClick={() => {
                   const aiDetection = result.overall_score;
-                  const aiSimilarityRaw = (aiPlagResult.summary?.maxSimilarity ?? 0) * 100;
-                  const aiSimilarity = Math.min(Math.round(aiSimilarityRaw), 100);
-                  const merged = Math.min(Math.round(aiDetection * 0.55 + aiSimilarity * 0.45), 100);
+                  const aiSimilarityRaw =
+                    (aiPlagResult.summary?.maxSimilarity ?? 0) * 100;
+                  const aiSimilarity = Math.min(
+                    Math.round(aiSimilarityRaw),
+                    100,
+                  );
+                  const merged = Math.min(
+                    Math.round(aiDetection * 0.55 + aiSimilarity * 0.45),
+                    100,
+                  );
                   setMergedScore({ merged, aiDetection, aiSimilarity });
                 }}
               >
@@ -750,34 +756,50 @@ export default function App() {
 
             {mergedScore && (
               <div className="merged-score-card">
-                <div className="merged-score-card__header">Combined AI Probability</div>
+                <div className="merged-score-card__header">
+                  Combined AI Probability
+                </div>
                 <div className="merged-score-card__body">
-                  <div className={`merged-score-card__gauge ${mergedScore.merged >= 70 ? 'high' : mergedScore.merged >= 40 ? 'med' : 'low'}`}>
+                  <div
+                    className={`merged-score-card__gauge ${mergedScore.merged >= 70 ? "high" : mergedScore.merged >= 40 ? "med" : "low"}`}
+                  >
                     {mergedScore.merged}%
                   </div>
                   <div className="merged-score-card__verdict">
                     {mergedScore.merged >= 70
-                      ? 'High probability this code is AI-generated.'
+                      ? "High probability this code is AI-generated."
                       : mergedScore.merged >= 40
-                        ? 'Moderate AI signals — review recommended.'
-                        : 'Low AI probability — likely human-written.'}
+                        ? "Moderate AI signals — review recommended."
+                        : "Low AI probability — likely human-written."}
                   </div>
                   <div className="merged-score-card__breakdown">
                     <div className="merged-score-card__row">
-                      <span className="merged-score-card__label">AI Detection (heuristic + ML)</span>
+                      <span className="merged-score-card__label">
+                        AI Detection (heuristic + ML)
+                      </span>
                       <span className="merged-score-card__weight">55%</span>
-                      <span className="merged-score-card__val">{mergedScore.aiDetection}%</span>
+                      <span className="merged-score-card__val">
+                        {mergedScore.aiDetection}%
+                      </span>
                     </div>
                     <div className="merged-score-card__row">
-                      <span className="merged-score-card__label">AI Code Similarity</span>
+                      <span className="merged-score-card__label">
+                        AI Code Similarity
+                      </span>
                       <span className="merged-score-card__weight">45%</span>
-                      <span className="merged-score-card__val">{mergedScore.aiSimilarity}%</span>
+                      <span className="merged-score-card__val">
+                        {mergedScore.aiSimilarity}%
+                      </span>
                     </div>
                     <div className="merged-score-card__divider" />
                     <div className="merged-score-card__row merged-score-card__row--total">
-                      <span className="merged-score-card__label">Merged Score</span>
+                      <span className="merged-score-card__label">
+                        Merged Score
+                      </span>
                       <span className="merged-score-card__weight" />
-                      <span className="merged-score-card__val">{mergedScore.merged}%</span>
+                      <span className="merged-score-card__val">
+                        {mergedScore.merged}%
+                      </span>
                     </div>
                   </div>
                 </div>
