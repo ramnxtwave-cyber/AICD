@@ -135,7 +135,7 @@ async function generateCodeWithAI(apiKey, question, language) {
     .trim();
   return code;
 }
-
+// http://127.0.0.1:8080
 async function submitCodeToBackend(
   apiKey,
   { code, studentId, questionId, examId, language },
@@ -159,28 +159,18 @@ async function submitCodeToBackend(
   return data;
 }
 
-async function runPlagiarismCheck(
-  apiKey,
-  { code, questionId, examId, language },
-) {
-  const res = await fetch(`${PLAG_BACKEND_URL}/check`, {
+async function runDirectComparison(apiKey, { code1, code2, language }) {
+  const res = await fetch(`http://127.0.0.1:8080/compare-direct`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...(apiKey ? { "X-OpenAI-API-Key": apiKey } : {}),
     },
-    body: JSON.stringify({
-      code,
-      questionId,
-      examId: examId || undefined,
-      language,
-      similarityThreshold: 0.5,
-      maxResults: 10,
-      useNormalization: true,
-    }),
+    body: JSON.stringify({ code1, code2, language }),
   });
   const data = await res.json();
-  if (!data.success) throw new Error(data.error || "Plagiarism check failed");
+  if (!data.success)
+    throw new Error(data.error || "Direct comparison failed");
   return data;
 }
 
@@ -357,10 +347,9 @@ export default function App() {
       setAiGeneratedCode(generatedCode);
 
       setAiStep("checking");
-      const plagResult = await runPlagiarismCheck(aiApiKey, {
-        code,
-        questionId: qId,
-        examId: eId,
+      const plagResult = await runDirectComparison(aiApiKey, {
+        code1: code,
+        code2: generatedCode,
         language: backendLang,
       });
       setAiPlagResult(plagResult);
@@ -895,7 +884,7 @@ export default function App() {
                   <span
                     className={`modal-step__dot ${aiStep === "checking" ? "active" : ""}`}
                   />
-                  <span>Running plagiarism check…</span>
+                  <span>Comparing current code with AI code…</span>
                 </div>
               </div>
             )}
