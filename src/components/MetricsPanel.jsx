@@ -107,10 +107,10 @@ export function MetricsPanel({ tiers }) {
       <BypassBanner bypass={bypass} />
 
       <Section title="Active Scoring Signals (9)">
-        <MetricRow label="Naming verbosity"          value={m1.naming_verbosity}      hint="High = long descriptive names (23%)"     isAILike={m1.naming_verbosity > 55}       />
-        <MetricRow label="Dead code absence"         value={m1.dead_code_absence}     hint="High = no commented-out code (18%)"      isAILike={m1.dead_code_absence > 65}      />
-        <MetricRow label="Variable reuse"            value={m1.variable_reuse}        hint="High = every var unique = AI (16%)"      isAILike={m1.variable_reuse > 55}         />
-        <MetricRow label="Structural regularity"     value={m1.structural_regularity} hint="High = identical method pattern (12%)"   isAILike={m1.structural_regularity > 55}  />
+        <MetricRow label="Naming verbosity"          value={m1.naming_verbosity}      hint="High = long descriptive names (28%)"     isAILike={m1.naming_verbosity > 55}       />
+        <MetricRow label="Variable reuse"            value={m1.variable_reuse}        hint="High = every var unique = AI (19%)"      isAILike={m1.variable_reuse > 55}         />
+        <MetricRow label="Structural regularity"     value={m1.structural_regularity} hint="High = canonical function pattern (12%)" isAILike={m1.structural_regularity > 55}  />
+        <MetricRow label="Dead code absence"         value={m1.dead_code_absence}     hint="High = no commented-out code (10%)"      isAILike={m1.dead_code_absence > 65}      />
         <MetricRow label="Magic number usage"        value={m1.magic_numbers}         hint="High = named constants = AI (10%)"       isAILike={m1.magic_numbers > 55}          />
         <MetricRow label="Type-token ratio"          value={m1.type_token_ratio}      hint="Low = narrow vocabulary = AI (8%)"       isAILike={m1.type_token_ratio < 55}       />
         <MetricRow label="Exception handling"        value={m1.exception_handling}    hint="High = broad except Exception (6%)"      isAILike={m1.exception_handling > 55}     />
@@ -125,7 +125,7 @@ export function MetricsPanel({ tiers }) {
         <MetricRow label="Type annotation coverage"  value={m1.type_annotations}      hint="→ bypass flag (not scored)"              isAILike={m1.type_annotations > 55}  dimmed />
         <MetricRow label="Docstring coverage"        value={m1.docstring_coverage}    hint="→ bypass flag (not scored)"              isAILike={m1.docstring_coverage > 60} dimmed />
         <MetricRow label="Emoji presence"            value={m1.emoji_presence}        hint="→ bypass flag (not scored)"              isAILike={m1.emoji_presence > 30}     dimmed />
-        <MetricRow label="Comment absence"           value={m1.comment_absence}       hint="Removed — humans skip comments in exams" isAILike={m1.comment_absence > 60}    dimmed />
+        <MetricRow label="Comment absence"           value={m1.comment_absence}       hint="Removed — commenting style is personal preference" isAILike={m1.comment_absence > 60}    dimmed />
         <MetricRow label="Blank line padding"        value={m1.blank_density}         hint="Removed — meaningless at DSA scale"      isAILike={m1.blank_density > 50}      dimmed />
         <MetricRow label="Indent consistency"        value={m1.indent_consistency}    hint="Removed — editor auto-formats"           isAILike={m1.indent_consistency > 85} dimmed />
         <MetricRow label="Halstead uniformity"       value={m1.halstead_uniformity}   hint="Removed — too noisy on short functions"  isAILike={m1.halstead_uniformity > 55} dimmed />

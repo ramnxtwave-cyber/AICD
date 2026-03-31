@@ -926,10 +926,11 @@ export function stringFormattingStyle(text, lp) {
 }
 
 // 12. Dead Code Absence — high = AI
-// NOTE: bare print(var)/console.log(var)/System.out.println(var) are NOT debug
-// leftovers — on this platform they are the answer output (console output is
-// compared against expected output).  Only print statements that contain the
-// literal word "debug" in a string argument count as debug prints.
+// Checks commented-out code blocks ONLY.  A student who tries brute force,
+// comments it out, then writes the optimised solution is a human fingerprint.
+// AI never leaves commented-out attempts.
+// No debug-print detection — on this platform print()/console.log()/
+// System.out.println() are the answer output mechanism, not debug leftovers.
 const COMMENTED_CODE_RE = /\b(def |class |return |import |from |for |if |while |func |fn |pub |void |int |char |double |float |bool |const |var |struct |enum |throw |raise |switch )|\bfunction\s+\w+\s*\(/;
 
 export function deadCodeAbsence(lines, lp) {
@@ -938,15 +939,9 @@ export function deadCodeAbsence(lines, lp) {
     const t = l.trim();
     return commentRe.test(t) && COMMENTED_CODE_RE.test(t);
   }).length;
-  const debugPrints = lines.filter(
-    (l) =>
-      /\bprint\s*\(\s*["']debug/i.test(l) ||
-      /\bconsole\.log\s*\(\s*["']debug/i.test(l),
-  ).length;
-  const deadIndicators = commentedCode + debugPrints;
-  if (deadIndicators === 0) return 75;
-  if (deadIndicators === 1) return 50;
-  return Math.max(10, 75 - deadIndicators * 20);
+  if (commentedCode === 0) return 75;
+  if (commentedCode === 1) return 50;
+  return Math.max(10, 75 - commentedCode * 20);
 }
 
 // 13. Variable Reuse Pattern — low reuse = AI
@@ -1201,7 +1196,7 @@ export function classifyLine(line, allLines, idx, language) {
   if (lp.docSections && lp.docSections.test(t))
     aiSignals.push("structured doc section (@param/@returns/Args)");
 
-  // Type annotations on function definitions
+  // Type annotations on function definitions + structural regularity signals
   if (lp.fnDef && lp.fnDef.test(t)) {
     if (lp.typeAnnot && lp.typeAnnot.test(t)) {
       aiSignals.push("fully type-annotated function signature");
@@ -1210,6 +1205,23 @@ export function classifyLine(line, allLines, idx, language) {
     if (lp.returnType && lp.returnType.test(t)) {
       aiSignals.push("return type annotation");
       lp.returnType.lastIndex = 0;
+    }
+    // Structural regularity criterion (c): long function name > 12 chars
+    const fnN = extractFnName(t);
+    if (fnN && fnN.length > 12)
+      aiSignals.push(`AI-verbose function name (${fnN})`);
+    // Structural regularity criterion (a): param name analysis
+    // Only flag short params as human when no type annotations present —
+    // short params WITH annotations (x: int) is still an AI pattern.
+    const params = extractParams(t);
+    if (params.length > 0) {
+      const shortParams = params.filter(p => p.length < 4 || SHORT_PARAM_NAMES.has(p));
+      const hasAnnotations = lp.typeAnnot && lp.typeAnnot.test(t);
+      if (lp.typeAnnot) lp.typeAnnot.lastIndex = 0;
+      if (shortParams.length === 0)
+        aiSignals.push("full-word parameter names");
+      else if (shortParams.length === params.length && !hasAnnotations)
+        humanSignals.push(`competitive-style short params (${shortParams.slice(0, 3).join(", ")})`);
     }
   }
 
@@ -1256,26 +1268,24 @@ export function classifyLine(line, allLines, idx, language) {
     aiSignals.push(`verbose naming: ${verboseIds.slice(0, 2).join(", ")}`);
 
   const kw2 = new Set([
-    "if",
-    "in",
-    "or",
-    "and",
-    "not",
-    "for",
-    "def",
-    "try",
-    "as",
-    "is",
-    "do",
-    "of",
-    "fn",
-    "go",
+    "if", "in", "or", "and", "not", "for", "def", "try", "as", "is", "do", "of", "fn", "go",
+    // C-family type keywords / language constructs (not variable names)
+    "int", "new", "var", "let", "std", "end", "nil", "out", "pub", "use",
+    "map", "set", "get", "put", "add", "pop", "has", "run", "log",
+    "max", "min", "abs", "len", "key", "str", "num", "the", "any", "all",
+    "top", "err", "ret", "arr", "vec", "val", "ref", "ptr", "mut", "raw",
   ]);
   const shorts = (codeOnly.match(/\b[a-z]{1,3}\b/g) || []).filter(
     (i) => !kw2.has(i),
   );
   if (shorts.length >= 2)
     humanSignals.push(`abbreviated names: ${shorts.slice(0, 2).join(", ")}`);
+
+  // Variable mutation — competitive coding pattern (human signal)
+  if (/\b[a-z_]\w*\s*(\+=|-=|\*=|\/=|%=|\|=|&=|\^=|<<=|>>=)/.test(codeOnly))
+    humanSignals.push("compound assignment (competitive pattern)");
+  if (/\b[a-z_]\w*\s*(\+\+|--)/.test(codeOnly) || /(\+\+|--)\s*[a-z_]\w*\b/.test(codeOnly))
+    humanSignals.push("increment/decrement operator");
 
   // Code style markers
   if (/:\s+(return|pass|break|continue)\b/.test(t))
@@ -1479,15 +1489,11 @@ export function runTier1Debug(code, lines, language) {
   const fmtOldMatches = lp.fmtOld ? (code.match(lp.fmtOld) || []) : [];
   if (lp.fmtOld) lp.fmtOld.lastIndex = 0;
 
-  // ── 12. Dead Code Absence ──────────────────────────────────────────────
+  // ── 12. Dead Code Absence (commented-out code only) ────────────────────
   const commentedCode = lines.filter((l) => {
     const t = l.trim();
     return commentRe.test(t) && COMMENTED_CODE_RE.test(t);
   });
-  const debugPrints = lines.filter((l) =>
-    /\bprint\s*\(\s*["']debug/i.test(l) ||
-    /\bconsole\.log\s*\(\s*["']debug/i.test(l),
-  );
 
   // ── 13. Variable Reuse ─────────────────────────────────────────────────
   const vrAssignments = {};
@@ -1671,7 +1677,6 @@ export function runTier1Debug(code, lines, language) {
     dead_code_absence: {
       score: scores.dead_code_absence,
       commentedCode: commentedCode.map((l) => l.trim()),
-      debugPrints: debugPrints.map((l) => l.trim()),
     },
     variable_reuse: {
       score: scores.variable_reuse,
@@ -1766,20 +1771,22 @@ export function computeBypassFlag(code, lines, language) {
 //   guard_clauses      → humans also write guard clauses in DSA
 //   complexity_uniformity → not stable across languages/code sizes
 //   type_annotations, docstring_coverage, emoji_presence → bypass flag
-//   comment_absence    → humans also skip comments in exams
+//   comment_absence    → removed: commenting style is personal preference
 //   blank_density      → meaningless at DSA scale
 //   indent_consistency → editor auto-formats
 //   halstead_uniformity → too noisy on short DSA functions
 //   string_formatting  → DSA solutions rarely use complex strings
+//   guard_clauses      → too language-dependent
+//   error_verbosity    → sparse in DSA code
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function scoreTier1(m) {
   return Math.round(
-    m.naming_verbosity * 0.23 +
-      m.dead_code_absence * 0.18 +
-      m.variable_reuse * 0.16 +
+    m.naming_verbosity * 0.28 +
+      m.variable_reuse * 0.19 +
       m.structural_regularity * 0.12 +
-      m.magic_numbers * 0.1 +
+      m.dead_code_absence * 0.10 +
+      m.magic_numbers * 0.10 +
       (100 - m.type_token_ratio) * 0.08 +
       m.exception_handling * 0.06 +
       (100 - m.entropy) * 0.05 +

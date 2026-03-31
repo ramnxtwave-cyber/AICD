@@ -10,47 +10,41 @@ All weights are tuned for one specific context: **proctored DSA assessments** wh
 
 Total: 100% across 9 signals.
 
-### Naming Verbosity — 23%
+### Naming Verbosity — 28%
 
 **Why highest:** This is the single most reliable separator between AI and human code in a proctored DSA exam. Under exam time pressure, humans default to short, muscle-memory names: `lo`, `hi`, `n`, `res`, `ans`, `dp`. AI models are trained on well-documented open-source code and consistently produce verbose names like `leftPointer`, `currentElement`, `maximumSubarraySum`. This pattern holds across all 6 languages and all submission lengths.
 
-**Why not higher:** Above ~25%, a single signal begins to dominate the Tier 1 score, meaning a student who happens to write verbose names (perhaps from a teaching style that emphasises readability) could be over-penalised before other signals get a chance to moderate.
-
-**Evidence:** In manual review of ~200 submissions, naming style alone correctly separated AI from human in ~78% of cases. No other single heuristic exceeded 65%.
+**Why 28%:** Increased from 23% because the removal of inline comment absence (7% → 0%) and reduction of dead code absence (18% → 10%) freed weight that was redistributed to the most discriminative signals. Naming verbosity earned the largest share because it's the most robust signal across all submission types.
 
 ---
 
-### Dead Code Absence — 18%
+### Variable Reuse — 19%
 
-**Why second highest:** AI-generated code is surgically clean. It never contains commented-out attempts or leftover scratch code. In a timed exam, humans almost always leave traces of their working process — a `# tried BFS first` comment, a block of code commented out with `#`, or a leftover function they decided not to use. The absence of any such artifact across an entire submission is a strong AI signal.
+**Why second highest:** AI models assign each intermediate value to a uniquely-named variable: `filteredList`, `sortedData`, `mappedResult`, `finalOutput`. Humans under pressure reuse variables freely: `res = sort(res)`, `arr = arr[1:]`, `x = x + 1`. The number of variables assigned more than once is a reliable discriminator.
 
-**Important distinction:** Bare `print(x)` / `console.log(x)` / `System.out.println(x)` are **not** counted as debug prints. On this platform, print statements are the answer output — the system compares console output against expected output. Only print statements containing the literal string "debug" (e.g. `print("debug:", x)`) are treated as debug indicators. This prevents the signal from penalising every student who correctly outputs their answer.
-
-**Why not higher:** Some experienced competitive programmers write clean code naturally. Short submissions (< 15 lines) rarely have dead code regardless of authorship. At 18%, this signal is influential but not overwhelming, so clean human code doesn't auto-flag.
-
----
-
-### Variable Reuse — 16%
-
-**Why third:** AI models assign each intermediate value to a uniquely-named variable: `filteredList`, `sortedData`, `mappedResult`, `finalOutput`. Humans under pressure reuse variables freely: `res = sort(res)`, `arr = arr[1:]`, `x = x + 1`. The number of variables assigned more than once is a reliable discriminator.
-
-**Why 16% and not 20%:** Some DSA patterns (dynamic programming, sliding window) naturally avoid reassignment even in human code. Bumping this above ~16% would penalise students writing those specific algorithms.
+**Why 19%:** Increased from 16% because it is the second most reliable signal after naming. Some DSA patterns (dynamic programming, sliding window) naturally avoid reassignment even in human code, so it shouldn't surpass naming verbosity.
 
 ---
 
 ### Structural Regularity — 12%
 
-**Why 12%:** This signal measures whether functions follow a uniform "canonical" pattern that AI produces. The new definition (2+ of: full-word params, single return + no reassignment, function name > 12 chars, each param used exactly once) captures the AI's tendency to produce identically-structured functions. At 12%, it meaningfully contributes without overpowering — especially important because short submissions often have only 1–2 functions, making the percentage metric (canonical / total) jumpy.
+**Why 12%:** This signal measures whether functions follow a uniform "canonical" pattern that AI produces. A function is classified as canonical if it meets 2+ of: (a) full-word params, (b) single return + no reassignment (including compound assignments like `+=` and increment/decrement), (c) function name > 12 chars, (d) each param used exactly once. At 12%, it meaningfully contributes without overpowering — especially important because short submissions often have only 1–2 functions, making the percentage metric jumpy.
 
 **Why not higher:** With only 1–2 functions in a typical DSA submission, the score is binary (0% or 100%) most of the time. A higher weight would make the overall score swing too much on a single function's shape.
 
 ---
 
+### Dead Code Absence — 10%
+
+**Why 10%:** Now checks **commented-out code blocks only**. A student who tries brute force, comments it out, then writes the optimised solution is a strong human fingerprint — AI never leaves commented-out attempts. All debug-print detection has been removed because on this platform `print()` / `console.log()` / `System.out.println()` are how students produce output, so every submission has them.
+
+**Why reduced from 18%:** Removing debug-print detection narrowed the signal's scope. It now only fires on commented-out code, which is less common than the previous combined metric. At 10%, it contributes meaningfully when commented-out code is present without penalising clean submissions too heavily.
+
+---
+
 ### Magic Number Usage — 10%
 
-**Why 10%:** AI almost always defines named constants (`INF = float('inf')`, `MOD = 10**9 + 7`, `MAX_SIZE = 1000`). Humans write magic numbers inline (`if x > 1000`, `% (10**9+7)`). This is a consistent signal but not as strong as naming or dead code because some human styles (competitive programming templates) also define constants at the top.
-
-**Why not lower:** In DSA assessments specifically, the presence of named constants for common values like infinity or modular arithmetic bounds is disproportionately AI-like compared to contest-style inline usage.
+**Why 10%:** AI almost always defines named constants (`INF = float('inf')`, `MOD = 10**9 + 7`, `MAX_SIZE = 1000`). Humans write magic numbers inline (`if x > 1000`, `% (10**9+7)`). This is a consistent signal but not as strong as naming or variable reuse because some human styles (competitive programming templates) also define constants at the top.
 
 ---
 
@@ -58,31 +52,27 @@ Total: 100% across 9 signals.
 
 **Why 8%:** Measures vocabulary diversity. AI code reuses a narrow set of words ("data", "result", "value", "current", "node") across different contexts. Humans use more context-specific vocabulary. This is a moderate signal — it adds information but isn't reliable enough to carry more weight, especially for short submissions where vocabulary is naturally limited.
 
-**Why not higher:** Very short functions (< 20 lines) naturally have few unique tokens regardless of author. The signal only becomes discriminative at moderate-to-large code sizes, making it a supporting rather than leading indicator.
-
 ---
 
 ### Exception Handling — 6%
 
 **Why 6%:** AI uses `except Exception as e` (Python), `catch (Exception e)` (Java), or `catch (...)` (C++) — broad, structured patterns. Humans use bare `except:`, empty `catch {}`, or skip error handling entirely. This is a reliable signal when present but fires rarely in DSA submissions (most don't involve error handling at all), hence the low weight.
 
-**Why not lower:** When it does fire, it's highly discriminative. At 6%, it contributes meaningfully when present without distorting the score when absent (default score 50 = neutral contribution).
-
 ---
 
 ### Identifier Entropy — 5%
 
-**Why 5%:** Shannon entropy of identifier usage. AI code has lower entropy (more repetitive, predictable vocabulary). This is a mathematical signal that works as a tie-breaker rather than a primary indicator. It correlates with naming verbosity and type-token ratio but adds an independent angle (repetition patterns vs. diversity vs. length).
-
-**Why not higher:** Entropy is sensitive to code length — very short code naturally has low entropy. It overlaps significantly with type-token ratio. More than 5% would give too much combined weight to vocabulary-based signals.
+**Why 5%:** Shannon entropy of identifier usage. AI code has lower entropy (more repetitive, predictable vocabulary). This is a mathematical signal that works as a tie-breaker rather than a primary indicator. It correlates with naming verbosity and type-token ratio but adds an independent angle.
 
 ---
 
 ### Import Organisation — 2%
 
-**Why lowest:** AI perfectly groups imports by category (stdlib → third-party → local) and sorts them alphabetically. Humans add imports ad-hoc. This is a real signal but DSA submissions typically have 0–3 import lines, making it almost useless. At 2%, it contributes only when a submission has enough imports for the pattern to be meaningful.
+**Why lowest:** AI perfectly groups imports by category (stdlib → third-party → local) and sorts them alphabetically. Humans add imports ad-hoc. DSA submissions typically have 0–3 import lines, making it almost useless. At 2%, it contributes only when a submission has enough imports for the pattern to be meaningful.
 
-**Why not 0%:** In Java and C++ submissions that import multiple standard library headers, perfect organisation is a meaningful micro-signal. Removing it entirely wastes available information.
+### Inline Comment Absence — REMOVED
+
+**Why removed:** Commenting style is personal preference, not an AI signal. Some humans write extensive comments; others write none. In a timed exam, neither is diagnostic of AI use. The weight was redistributed to naming verbosity and variable reuse.
 
 ---
 

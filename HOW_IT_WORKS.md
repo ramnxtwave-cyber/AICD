@@ -37,21 +37,21 @@ In a proctored DSA exam, type annotations, docstrings, and emojis are near-impos
 
 **Naming & vocabulary**
 
-- **Naming verbosity** (weight: 23%) — The strongest signal. Measures how descriptive variable and function names are. AI tends to use long, overly formal names like `leftPointer` or `currentElement`. Humans under exam pressure use shorter, pragmatic names like `lo`, `hi`, `res`. The function extracts all identifiers, filters out keywords and stdlib names, and scores based on the ratio of verbose identifiers (length > 9, or contains underscore and length > 6).
+- **Naming verbosity** (weight: 28%) — The strongest signal. Measures how descriptive variable and function names are. AI tends to use long, overly formal names like `leftPointer` or `currentElement`. Humans under exam pressure use shorter, pragmatic names like `lo`, `hi`, `res`. The function extracts all identifiers, filters out keywords and stdlib names, and scores based on the ratio of verbose identifiers (length > 9, or contains underscore and length > 6).
 
-- **Type-token ratio** (weight: 8%) — Counts how many unique words appear compared to total words. AI code reuses the same vocabulary over and over ("data", "result", "value"), giving it a low type-token ratio. Human code tends to use more varied, context-specific names. Score is inverted so low TTR produces a high AI score.
+- **Variable reuse** (weight: 19%) — Measures how often the same variable names are reassigned. AI reuses generic names (`result`, `temp`, `current`) — each intermediate value gets a fresh named variable. Humans use context-specific throwaway names and reassign variables freely.
 
 **Structure & regularity**
 
-- **Structural regularity** (weight: 12%) — Measures how many functions exhibit an AI-like "canonical" pattern. A function is classified as canonical if it meets 2 or more of the following 4 criteria: (a) all parameter names are full English words (length >= 4, no abbreviations like `lo`, `hi`, `ptr`, `idx`); (b) single return statement with no intermediate variable reassignment; (c) function name is longer than 12 characters; (d) every parameter has a corresponding variable used exactly once before return. The score is the percentage of functions that are canonical.
+- **Structural regularity** (weight: 12%) — Measures how many functions exhibit an AI-like "canonical" pattern. A function is classified as canonical if it meets 2 or more of the following 4 criteria: (a) all parameter names are full English words (length >= 4, no abbreviations like `lo`, `hi`, `ptr`, `idx`); (b) single return statement with no intermediate variable reassignment (also catches compound assignments like `+=` and increment/decrement operators); (c) function name is longer than 12 characters; (d) every parameter has a corresponding variable used exactly once before return. The score is the percentage of functions that are canonical.
 
 **Code cleanliness**
 
-- **Dead code absence** (weight: 18%) — Checks for commented-out code (lines that look like real code but are commented out, e.g. `# return old_result`, `// if (x > 0)`). AI-generated code is surgically clean — never has dead code. Humans leave commented-out attempts and leftover scratch code all the time, especially in exams. Note: bare `print(x)` / `console.log(x)` / `System.out.println(x)` are NOT counted as debug prints — on this platform they are the answer output (console output is compared against expected output). Only print statements containing the literal string "debug" are flagged.
-
-- **Variable reuse** (weight: 16%) — Measures how often the same variable names are reassigned. AI reuses generic names (`result`, `temp`, `current`) — each intermediate value gets a fresh named variable. Humans use context-specific throwaway names and reassign variables freely.
+- **Dead code absence** (weight: 10%) — Checks for commented-out code blocks only (lines that look like real code but are commented out, e.g. `# return old_result`, `// if (x > 0)`). AI-generated code is surgically clean — never has dead code. A student trying a brute force approach, commenting it out, then writing the optimised solution is a strong human fingerprint. No debug-print detection — on this platform `print()` / `console.log()` / `System.out.println()` are how students produce output, so every submission has them.
 
 - **Magic number usage** (weight: 10%) — AI almost always defines named constants (e.g. `INF = float('inf')`). Humans write magic numbers inline (e.g. `if retries > 3`). The score checks for named constant declarations (`UPPER_CASE = ...`) vs raw numeric literals.
+
+- **Type-token ratio** (weight: 8%) — Counts how many unique words appear compared to total words. AI code reuses the same vocabulary over and over ("data", "result", "value"), giving it a low type-token ratio. Human code tends to use more varied, context-specific names. Score is inverted so low TTR produces a high AI score.
 
 **Error handling**
 
@@ -67,18 +67,19 @@ In a proctored DSA exam, type annotations, docstrings, and emojis are near-impos
 
 These signals are still computed for diagnostic purposes but no longer affect the weighted score:
 
-| Signal                  | Old Weight | Why Removed                                             |
-| ----------------------- | ---------- | ------------------------------------------------------- |
-| Guard clause density    | 4%         | Humans also write guard clauses — not discriminative    |
-| Complexity uniformity   | 15%        | Not stable across different code sizes and languages    |
-| Type annotations        | 10%        | Moved to bypass flag — too rare in exams to weight      |
-| Docstring coverage      | 9%         | Moved to bypass flag — same reasoning                   |
-| Comment absence         | 7%         | Humans also skip comments in exams — not discriminative |
-| Halstead uniformity     | 6%         | Too noisy on short DSA functions                        |
-| String formatting style | 3%         | DSA solutions rarely use complex strings                |
-| Blank line density      | 3%         | Meaningless at DSA scale                                |
-| Indent consistency      | 1%         | Editor auto-formats — zero signal                       |
-| Emoji presence          | 1%         | Moved to bypass flag                                    |
+| Signal                  | Why Removed                                                     |
+| ----------------------- | --------------------------------------------------------------- |
+| Inline comment absence  | Commenting style is personal preference, not an AI signal       |
+| Guard clause density    | Humans also write guard clauses — not discriminative            |
+| Complexity uniformity   | Not stable across different code sizes and languages            |
+| Type annotations        | Moved to bypass flag — too rare in exams to weight              |
+| Docstring coverage      | Moved to bypass flag — same reasoning                           |
+| Halstead uniformity     | Too noisy on short DSA functions                                |
+| String formatting style | DSA solutions rarely use complex strings                        |
+| Blank line density      | Meaningless at DSA scale                                        |
+| Indent consistency      | Editor auto-formats — zero signal                               |
+| Emoji presence          | Moved to bypass flag                                            |
+| Error message verbosity | Too sparse in DSA code to be reliable                           |
 
 ### Line-by-Line Classification
 

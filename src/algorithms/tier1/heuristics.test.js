@@ -2128,45 +2128,26 @@ describe("deadCodeAbsence", () => {
     expect(deadCodeAbsence(ls, pyLP)).toBe(75);
   });
 
-  // ── Only print("debug...") IS a debug indicator ──────────────────────────
+  // ── print("debug...") is NO LONGER flagged — all debug print detection removed ──
+  // On this platform print()/console.log() are how students produce output.
 
-  it("DOES detect print('debug ...') as a debug indicator", () => {
+  it("print('debug ...') is NOT flagged (debug print detection removed)", () => {
     const ls = [
       "def foo():",
       '    print("debug: x =", x)',
       "    return x",
     ];
-    expect(deadCodeAbsence(ls, pyLP)).toBe(50);
+    expect(deadCodeAbsence(ls, pyLP)).toBe(75);
   });
 
-  it("DOES detect print('DEBUG ...') case-insensitively", () => {
-    const ls = [
-      "def foo():",
-      '    print("DEBUG value:", val)',
-      "    return val",
-    ];
-    expect(deadCodeAbsence(ls, pyLP)).toBe(50);
-  });
-
-  it("DOES detect console.log('debug ...') as a debug indicator", () => {
+  it("console.log('debug ...') is NOT flagged (debug print detection removed)", () => {
     const ls = [
       "function foo() {",
       '    console.log("debug test");',
       "    return 1;",
       "}",
     ];
-    expect(deadCodeAbsence(ls, jsLP)).toBe(50);
-  });
-
-  it("detects both print-debug and console.log-debug together", () => {
-    const ls = [
-      "def foo():",
-      '    print("debug something")',
-      '    console.log("debug test")',
-      "    return 1",
-    ];
-    const score = deadCodeAbsence(ls, pyLP);
-    expect(score).toBe(35);
+    expect(deadCodeAbsence(ls, jsLP)).toBe(75);
   });
 
   // ── Commented-out code detection (Python) ─────────────────────────────────
@@ -2322,7 +2303,7 @@ describe("deadCodeAbsence", () => {
     expect(score).toBe(15);
   });
 
-  it("counts debug string prints AND commented code together", () => {
+  it("print('debug') alongside commented code: only commented code counts", () => {
     const ls = [
       "# def old():",
       '    print("debug: checking x")',
@@ -2330,7 +2311,7 @@ describe("deadCodeAbsence", () => {
       "    return 1",
     ];
     const score = deadCodeAbsence(ls, pyLP);
-    expect(score).toBe(35);
+    expect(score).toBe(50);
   });
 
   // ── Score boundaries ──────────────────────────────────────────────────────
@@ -2495,9 +2476,9 @@ describe("deadCodeAbsence", () => {
     expect(deadCodeAbsence(ls, pyLP)).toBe(75);
   });
 
-  it("print('debug') IS caught — string argument starts with debug", () => {
+  it("print('debug') is NOT caught — debug print detection removed", () => {
     const ls = ['print("debug")'];
-    expect(deadCodeAbsence(ls, pyLP)).toBe(50);
+    expect(deadCodeAbsence(ls, pyLP)).toBe(75);
   });
 });
 
@@ -4156,12 +4137,144 @@ describe("classifyLine", () => {
 
   it("flags abbreviated names as human signal", () => {
     const result = classifyLine("val = fn(cb, dp, sz)", [], 0, "Python");
-    expect(result.signals).toContain("abbreviated names: val, cb");
+    expect(result.signals).toContain("abbreviated names: cb, dp");
   });
 
   it("returns uncertain when AI and human signals balance", () => {
     const result = classifyLine("", [], 0, "Python");
     expect(result.status).toBe("uncertain");
+  });
+
+  // ── Structural regularity: long function name (criterion c) ──────────────
+  it("flags AI-verbose function name when name > 12 chars (Python)", () => {
+    const result = classifyLine("def calculate_maximum(numbers):", [], 0, "Python");
+    const hasFnNameSignal = result.signals.some(s => s.includes("AI-verbose function name"));
+    expect(hasFnNameSignal).toBe(true);
+  });
+
+  it("flags AI-verbose function name when name > 12 chars (JavaScript)", () => {
+    const result = classifyLine("function calculateMaximum(numbers) {", [], 0, "JavaScript");
+    const hasFnNameSignal = result.signals.some(s => s.includes("AI-verbose function name"));
+    expect(hasFnNameSignal).toBe(true);
+  });
+
+  it("flags AI-verbose function name when name > 12 chars (Java)", () => {
+    const result = classifyLine("public int calculateMaximum(int[] numbers) {", [], 0, "Java");
+    const hasFnNameSignal = result.signals.some(s => s.includes("AI-verbose function name"));
+    expect(hasFnNameSignal).toBe(true);
+  });
+
+  it("does NOT flag short function name ≤ 12 chars", () => {
+    const result = classifyLine("def solve(n):", [], 0, "Python");
+    const hasFnNameSignal = result.signals.some(s => s.includes("AI-verbose function name"));
+    expect(hasFnNameSignal).toBe(false);
+  });
+
+  // ── Structural regularity: param name analysis (criterion a) ─────────────
+  it("flags full-word parameter names as AI signal", () => {
+    const result = classifyLine("def process(numbers, target):", [], 0, "Python");
+    expect(result.signals).toContain("full-word parameter names");
+  });
+
+  it("flags competitive-style short params as human signal (Python)", () => {
+    const result = classifyLine("def solve(n, lo, hi):", [], 0, "Python");
+    const hasShortParam = result.signals.some(s => s.includes("competitive-style short params"));
+    expect(hasShortParam).toBe(true);
+  });
+
+  it("flags competitive-style short params as human signal (JavaScript)", () => {
+    const result = classifyLine("function solve(n) {", [], 0, "JavaScript");
+    const hasShortParam = result.signals.some(s => s.includes("competitive-style short params"));
+    expect(hasShortParam).toBe(true);
+  });
+
+  it("does NOT flag short params when type annotations are present", () => {
+    const result = classifyLine("def calculate(x: int, y: str) -> bool:", [], 0, "Python");
+    const hasShortParam = result.signals.some(s => s.includes("competitive-style short params"));
+    expect(hasShortParam).toBe(false);
+  });
+
+  it("no param signal for functions with no params", () => {
+    const result = classifyLine("def generate_output():", [], 0, "Python");
+    expect(result.signals.some(s => s.includes("parameter names"))).toBe(false);
+    expect(result.signals.some(s => s.includes("short params"))).toBe(false);
+  });
+
+  // ── Variable mutation: compound assignment (criterion b) ─────────────────
+  it("flags compound assignment as human signal (+=)", () => {
+    const result = classifyLine("ans += i", [], 0, "Python");
+    expect(result.signals).toContain("compound assignment (competitive pattern)");
+  });
+
+  it("flags compound assignment as human signal (-=)", () => {
+    const result = classifyLine("count -= 1", [], 0, "Python");
+    expect(result.signals).toContain("compound assignment (competitive pattern)");
+  });
+
+  it("flags compound assignment as human signal (*=)", () => {
+    const result = classifyLine("result *= factor", [], 0, "Python");
+    expect(result.signals).toContain("compound assignment (competitive pattern)");
+  });
+
+  it("flags increment operator as human signal (i++)", () => {
+    const result = classifyLine("i++;", [], 0, "JavaScript");
+    expect(result.signals).toContain("increment/decrement operator");
+  });
+
+  it("flags decrement operator as human signal (--j)", () => {
+    const result = classifyLine("--j;", [], 0, "C++");
+    expect(result.signals).toContain("increment/decrement operator");
+  });
+
+  it("does NOT flag plain assignment as compound assignment", () => {
+    const result = classifyLine("result = calculate(data)", [], 0, "Python");
+    expect(result.signals.some(s => s.includes("compound assignment"))).toBe(false);
+    expect(result.signals.some(s => s.includes("increment/decrement"))).toBe(false);
+  });
+
+  // ── print(x) must NOT be flagged ─────────────────────────────────────────
+  it("does NOT flag print(x) as any signal", () => {
+    const result = classifyLine("print(ans)", [], 0, "Python");
+    expect(result.signals.some(s => s.includes("debug"))).toBe(false);
+    expect(result.signals.some(s => s.includes("print"))).toBe(false);
+  });
+
+  it("does NOT flag console.log(x) as any signal", () => {
+    const result = classifyLine("console.log(result);", [], 0, "JavaScript");
+    expect(result.signals.some(s => s.includes("debug"))).toBe(false);
+    expect(result.signals.some(s => s.includes("print"))).toBe(false);
+  });
+
+  it("does NOT flag System.out.println(x) as any signal", () => {
+    const result = classifyLine("System.out.println(answer);", [], 0, "Java");
+    expect(result.signals.some(s => s.includes("debug"))).toBe(false);
+    expect(result.signals.some(s => s.includes("print"))).toBe(false);
+  });
+
+  // ── Realistic line classifications ────────────────────────────────────────
+  it("AI-style function def: long name + full-word params → ai", () => {
+    const result = classifyLine("def find_maximum_element(numbers):", [], 0, "Python");
+    expect(result.status).toBe("ai");
+    expect(result.signals.some(s => s.includes("AI-verbose function name"))).toBe(true);
+    expect(result.signals).toContain("full-word parameter names");
+  });
+
+  it("human-style function def: short name + short params → human", () => {
+    const result = classifyLine("def solve(n):", [], 0, "Python");
+    expect(result.status).toBe("human");
+  });
+
+  it("human-style mutation line: ans += i → human", () => {
+    const result = classifyLine("ans += i", [], 0, "Python");
+    expect(result.status).toBe("human");
+  });
+
+  it("human competitive loop with mutation: for (int i = 0; i < n; i++) → has human signals", () => {
+    const result = classifyLine("for (int i = 0; i < n; i++) {", [], 0, "C++");
+    const hasHuman = result.signals.some(s =>
+      s.includes("increment/decrement") || s.includes("abbreviated")
+    );
+    expect(hasHuman).toBe(true);
   });
 });
 
@@ -4414,7 +4527,7 @@ describe("scoreTier1", () => {
     expect(scoreTier1(base)).toBe(scoreTier1(withRemoved));
   });
 
-  it("naming_verbosity has highest weight (0.23)", () => {
+  it("naming_verbosity has highest weight (0.28)", () => {
     const base = {
       entropy: 50,
       blank_density: 0,
@@ -4438,7 +4551,7 @@ describe("scoreTier1", () => {
       emoji_presence: 0,
     };
     const withNaming = { ...base, naming_verbosity: 100 };
-    expect(scoreTier1(withNaming) - scoreTier1(base)).toBe(23);
+    expect(scoreTier1(withNaming) - scoreTier1(base)).toBe(28);
   });
 });
 

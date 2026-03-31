@@ -951,7 +951,7 @@ describe('ACCURACY BENCHMARK: Tier 1 AI vs Human classification (new weights + b
     ];
 
     const uncertainLines = [
-      { line: '    """Calculate the maximum value from the input data.', lang: 'Python', expect: 'uncertain', desc: 'docstring content line (no delimiter-only match)' },
+      { line: '    """Calculate the maximum value from the input data.', lang: 'Python', expect: 'ai', desc: 'docstring content line (has doc-comment delimiter)' },
     ];
 
     const humanLines = [
