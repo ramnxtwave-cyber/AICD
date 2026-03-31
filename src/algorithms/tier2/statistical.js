@@ -20,6 +20,10 @@ function tokenise(text) {
   return text.toLowerCase().match(/\b[a-z_]\w*\b/g) || [];
 }
 
+export function countTokens(text) {
+  return tokenise(text).length;
+}
+
 // ~120 words AI over-uses (GPT-4, Claude, Gemini, Copilot patterns)
 const AI_FAVOURED_TOKENS = new Set([
   // Verbs AI loves
@@ -444,7 +448,6 @@ export function bayesianFeatureScore(text, lines) {
       w: 6,
       ai: false,
     },
-    { test: () => /print\s*\(\s*\w+\s*\)\s*$/.test(text), w: 5, ai: false },
     { test: () => /#\s*[a-z].{0,30}$/.test(text), w: 5, ai: false },
     {
       test: () =>
@@ -476,12 +479,6 @@ export function bayesianFeatureScore(text, lines) {
       ai: false,
     },
 
-    // console.log with just variables (debug leftover, human)
-    {
-      test: () => /console\.log\s*\(\s*[a-z_]\w*\s*\)/m.test(text),
-      w: 6,
-      ai: false,
-    },
 
     // Short error messages (human)
     {
@@ -524,12 +521,27 @@ export function runTier2(code, lines) {
 }
 
 // Weighted score from Tier 2 metrics (0-100, high = AI)
-export function scoreTier2(m) {
+// Default weights: Bayesian 40%, Log-rank 35%, Token freq 20%, N-gram 3%, MATTR 2%
+// Length gate: if token count < 100, N-gram and MATTR weights go to 0,
+// their combined 5% is redistributed proportionally across the other three.
+export function scoreTier2(m, tokenCount = Infinity) {
+  let wBayesian = 0.40, wLogRank = 0.35, wHistogram = 0.20, wNgram = 0.03, wMattr = 0.02;
+
+  if (tokenCount < 100) {
+    const redistributed = wNgram + wMattr;
+    const remaining = wBayesian + wLogRank + wHistogram;
+    wBayesian  += redistributed * (wBayesian / remaining);
+    wLogRank   += redistributed * (wLogRank / remaining);
+    wHistogram += redistributed * (wHistogram / remaining);
+    wNgram = 0;
+    wMattr = 0;
+  }
+
   return Math.round(
-    (100 - m.ngram_entropy) * 0.2 +
-      m.log_rank * 0.25 +
-      m.token_histogram * 0.2 +
-      (100 - m.mattr) * 0.15 +
-      m.bayesian_features * 0.2,
+    m.bayesian_features * wBayesian +
+      m.log_rank * wLogRank +
+      m.token_histogram * wHistogram +
+      (100 - m.ngram_entropy) * wNgram +
+      (100 - m.mattr) * wMattr,
   );
 }

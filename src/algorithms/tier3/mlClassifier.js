@@ -7,8 +7,8 @@
  * Tier 3 (ML classification) results in a single /api/analyze call.
  *
  * Tier 3 runs two RoBERTa-based models:
- *   - roberta-large-openai-detector   (primary, RoBERTa Large, 355M params)
- *   - roberta-base-openai-detector    (secondary, RoBERTa Base, 125M params)
+ *   - roberta-large-openai-detector   (primary, RoBERTa Large, 355M params)  — weight 70%
+ *   - roberta-base-openai-detector    (secondary, RoBERTa Base, 125M params) — weight 30%
  *
  * Exported interface:
  *   mlClassify, getModelState, preloadModel, setStatusCallback

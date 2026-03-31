@@ -4,7 +4,7 @@
  */
 
 const TIER_META = {
-  tier1: { label: 'Tier 1', sub: 'Heuristic / Static',    color: '#58a6ff', desc: '17 signals — runs instantly, no model' },
+  tier1: { label: 'Tier 1', sub: 'Heuristic / Static',    color: '#58a6ff', desc: '9 scored signals + bypass flag — runs instantly, no model' },
   tier2: { label: 'Tier 2', sub: 'Statistical / Tokens',  color: '#d29922', desc: '5 signals — n-gram, Bayesian, MATTR'   },
   tier3: { label: 'Tier 3', sub: 'ML Classification',      color: '#bc8cff', desc: 'RoBERTa Large + Base ensemble via backend API' },
 };
@@ -80,8 +80,9 @@ function TierCard({ id, tier }) {
   );
 }
 
-export function TierBreakdown({ tiers }) {
+export function TierBreakdown({ tiers, language }) {
   if (!tiers) return null;
+  const showLangNote = (language === 'C' || language === 'C++') && tiers.tier2;
 
   return (
     <div style={{
@@ -94,6 +95,7 @@ export function TierBreakdown({ tiers }) {
         padding: '12px 16px',
         borderBottom: '1px solid var(--color-border-tertiary)',
         background: 'var(--color-background-tertiary)',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>
         <span style={{
           color: 'var(--color-text-tertiary)',
@@ -102,12 +104,25 @@ export function TierBreakdown({ tiers }) {
         }}>
           Tier Breakdown
         </span>
+        {language && (
+          <span style={{
+            color: 'var(--color-text-tertiary)',
+            fontSize: 10, fontFamily: 'var(--font-mono)',
+          }}>
+            {language}
+          </span>
+        )}
       </div>
 
       <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {Object.entries(tiers).map(([id, tier]) => (
           <TierCard key={id} id={id} tier={tier} />
         ))}
+        {showLangNote && (
+          <p style={{ color: '#d29922', fontSize: 10, fontFamily: 'var(--font-mono)', margin: '4px 0 0', background: 'rgba(210,153,34,0.08)', padding: '6px 10px', borderRadius: 6, border: '1px solid rgba(210,153,34,0.2)' }}>
+            Note: C/C++ submissions may produce less reliable Tier 2 scores — short identifiers by convention skew log-rank toward false human scores.
+          </p>
+        )}
       </div>
     </div>
   );

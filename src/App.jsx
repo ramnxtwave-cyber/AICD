@@ -18,6 +18,8 @@ import {
   getModelState,
   preloadModel,
   setStatusCallback,
+  computeModeBScore,
+  MODE_B_DEFAULTS,
 } from "./algorithms/detector.js";
 
 import { ScanProgress } from "./components/ScanProgress.jsx";
@@ -27,6 +29,7 @@ import { TierBreakdown } from "./components/TierBreakdown.jsx";
 import { CodeViewer } from "./components/CodeViewer.jsx";
 import { DetectionSummary } from "./components/DetectionSummary.jsx";
 import { PlainEnglishCard } from "./components/PlainEnglishCard.jsx";
+import { RegexLab } from "./components/RegexLab.jsx";
 
 const PINECONE_API_KEY =
   "pcsk_69ch9a_RPQLUArtXyReUKk87f7grMHiBzmz2EBWoqhENNJFufkbCPJ4DWJ9hrfq1DzcDXN";
@@ -202,6 +205,39 @@ export default function App() {
   const [aiPlagResult, setAiPlagResult] = useState(null);
   const [aiError, setAiError] = useState("");
   const [mergedScore, setMergedScore] = useState(null);
+  const [view, setView] = useState("detector"); // "detector" | "regex-lab"
+
+  // Layer 4 state
+  const [layer4Score, setLayer4Score] = useState(null);
+  const [modeBWeights, setModeBWeights] = useState({ ...MODE_B_DEFAULTS });
+  const [modeBFinal, setModeBFinal] = useState(null);
+
+  const adjustWeight = useCallback((key, rawPct) => {
+    const newVal = Math.min(0.6, Math.max(0, rawPct / 100));
+    setModeBWeights((prev) => {
+      const others = Object.keys(prev).filter((k) => k !== key);
+      const otherSum = others.reduce((s, k) => s + prev[k], 0);
+      const diff = newVal - prev[key];
+      const next = { ...prev, [key]: newVal };
+      if (otherSum > 0) {
+        for (const k of others) {
+          next[k] = Math.max(0, prev[k] - diff * (prev[k] / otherSum));
+        }
+      }
+      const total = Object.values(next).reduce((a, b) => a + b, 0);
+      if (Math.abs(total - 1.0) > 0.001) {
+        const scale = 1.0 / total;
+        for (const k of Object.keys(next)) next[k] *= scale;
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (layer4Score !== null && result) {
+      setModeBFinal(computeModeBScore(result, layer4Score, modeBWeights));
+    }
+  }, [modeBWeights, layer4Score, result]);
 
   useEffect(() => {
     setStatusCallback(() => {
@@ -352,12 +388,21 @@ export default function App() {
         language: backendLang,
       });
       setAiPlagResult(plagResult);
+
+      const l4Raw = (plagResult.summary?.maxSimilarity ?? 0) * 100;
+      const l4 = Math.min(Math.round(l4Raw), 100);
+      setLayer4Score(l4);
+      setModeBWeights({ ...MODE_B_DEFAULTS });
+      if (result) {
+        setModeBFinal(computeModeBScore(result, l4, MODE_B_DEFAULTS));
+      }
+
       setAiStep("done");
     } catch (err) {
       setAiError(err.message);
       setAiStep("error");
     }
-  }, [aiQuestion, aiApiKey, language, submissionInfo, code]);
+  }, [aiQuestion, aiApiKey, language, submissionInfo, code, result]);
 
   return (
     <div className="app-shell">
@@ -367,588 +412,718 @@ export default function App() {
           <span className="app-header__logo-icon">⬡</span>
           <span>CodeSentinel</span>
         </div>
+        <div className="app-header__nav">
+          <button
+            className={`app-nav-btn${view === "detector" ? " active" : ""}`}
+            onClick={() => setView("detector")}
+          >
+            Detector
+          </button>
+          <button
+            className={`app-nav-btn${view === "regex-lab" ? " active" : ""}`}
+            onClick={() => setView("regex-lab")}
+          >
+            Regex Lab ( only for Developers )
+          </button>
+        </div>
         <div className="app-header__badges">
-          <span className="app-badge app-badge--tier">3-tier detection</span>
+          <span className="app-badge app-badge--tier">3-tier + Layer 4</span>
           <span className="app-badge app-badge--info">
-            T1: 17 signals · T2: 5 signals · T3: ML
+            T1: 9 signals + bypass · T2: 5 signals · T3: ML · L4: AI similarity
           </span>
         </div>
       </header>
 
       {/* ── Content ─────────────────────────────────────────────────── */}
       <div className="app-container">
-        {/* Hero */}
-        <div className="hero">
-          <h1 className="hero__title">Detect AI-Generated Code</h1>
-          <p className="hero__subtitle">
-            Three-tier analysis — 17 heuristic signals, 5 statistical signals,
-            and optional in-browser ML classification. Everything runs locally.
-          </p>
-        </div>
-
-        {fetchingSubmission && (
-          <div className="submission-banner submission-banner--loading">
-            <span
-              style={{
-                animation: "pulse 0.8s infinite",
-                display: "inline-block",
-              }}
-            >
-              ◉
-            </span>{" "}
-            Loading submission from database…
-          </div>
-        )}
-
-        {submissionInfo && !fetchingSubmission && (
-          <div className="submission-banner submission-banner--info">
-            <span>📋</span>
-            <span style={{ flex: 1 }}>
-              Loaded submission <strong>{submissionInfo.id}</strong>
-              {submissionInfo.studentId && (
-                <>
-                  {" "}
-                  · Student: <strong>{submissionInfo.studentId}</strong>
-                </>
-              )}
-              {submissionInfo.questionId && (
-                <>
-                  {" "}
-                  · Question: <strong>{submissionInfo.questionId}</strong>
-                </>
-              )}
-              {submissionInfo.examId && (
-                <>
-                  {" "}
-                  · Exam: <strong>{submissionInfo.examId}</strong>
-                </>
-              )}
-            </span>
-            <button
-              className="ai-compare-btn"
-              onClick={() => {
-                setShowAiModal(true);
-                setAiStep(null);
-                setAiError("");
-              }}
-            >
-              🤖 Compare with AI Code
-            </button>
-          </div>
-        )}
-
-        {/* Main grid */}
-        <div className="main-grid">
-          {/* ── LEFT COLUMN ────────────────────────────────────────── */}
-          <div className="main-left">
-            {/* Language selector */}
-            <div className="lang-row">
-              {LANGUAGES.map((lang) => (
-                <button
-                  key={lang}
-                  className={`lang-btn${language === lang ? " active" : ""}`}
-                  onClick={() => setLanguage(lang)}
-                >
-                  {lang}
-                </button>
-              ))}
+        {view === "regex-lab" ? (
+          <>
+            <div className="hero">
+              <h1 className="hero__title">Regex Lab</h1>
+              <p className="hero__subtitle">
+                Paste code and see exactly what each Tier 1 heuristic regex
+                extracts — identifiers, constants, patterns, and scores.
+              </p>
+            </div>
+            <RegexLab />
+          </>
+        ) : (
+          <>
+            {/* Hero */}
+            <div className="hero">
+              <h1 className="hero__title">Detect AI-Generated Code</h1>
+              <p className="hero__subtitle">
+                Three-tier analysis + optional Layer 4 — 9 heuristic signals +
+                bypass flag, 5 statistical signals, ML classification, and AI
+                similarity check.
+              </p>
             </div>
 
-            {/* Editor */}
-            <div className="editor-card">
-              <div className="editor-card__titlebar">
-                <div className="editor-card__dots">
-                  {["#ef4444", "#f59e0b", "#22c55e"].map((c) => (
-                    <div
-                      key={c}
-                      className="editor-card__dot"
-                      style={{ background: c }}
-                    />
+            {fetchingSubmission && (
+              <div className="submission-banner submission-banner--loading">
+                <span
+                  style={{
+                    animation: "pulse 0.8s infinite",
+                    display: "inline-block",
+                  }}
+                >
+                  ◉
+                </span>{" "}
+                Loading submission from database…
+              </div>
+            )}
+
+            {submissionInfo && !fetchingSubmission && (
+              <div className="submission-banner submission-banner--info">
+                <span>📋</span>
+                <span style={{ flex: 1 }}>
+                  Loaded submission <strong>{submissionInfo.id}</strong>
+                  {submissionInfo.studentId && (
+                    <>
+                      {" "}
+                      · Student: <strong>{submissionInfo.studentId}</strong>
+                    </>
+                  )}
+                  {submissionInfo.questionId && (
+                    <>
+                      {" "}
+                      · Question: <strong>{submissionInfo.questionId}</strong>
+                    </>
+                  )}
+                  {submissionInfo.examId && (
+                    <>
+                      {" "}
+                      · Exam: <strong>{submissionInfo.examId}</strong>
+                    </>
+                  )}
+                </span>
+                <button
+                  className="ai-compare-btn"
+                  onClick={() => {
+                    setShowAiModal(true);
+                    setAiStep(null);
+                    setAiError("");
+                  }}
+                >
+                  Layer 4: AI Similarity Check
+                </button>
+              </div>
+            )}
+
+            {/* Main grid */}
+            <div className="main-grid">
+              {/* ── LEFT COLUMN ────────────────────────────────────────── */}
+              <div className="main-left">
+                {/* Language selector */}
+                <div className="lang-row">
+                  {LANGUAGES.map((lang) => (
+                    <button
+                      key={lang}
+                      className={`lang-btn${language === lang ? " active" : ""}`}
+                      onClick={() => setLanguage(lang)}
+                    >
+                      {lang}
+                    </button>
                   ))}
                 </div>
-                <span className="editor-card__info">
-                  {language} · {code.split("\n").length} lines
-                </span>
-                <div className="editor-card__actions">
-                  <button
-                    className="editor-action editor-action--ai"
-                    onClick={() => loadExample("ai")}
-                  >
-                    AI Sample
-                  </button>
-                  <button
-                    className="editor-action editor-action--human"
-                    onClick={() => loadExample("human")}
-                  >
-                    Human Sample
-                  </button>
-                  <button
-                    className="editor-action editor-action--clear"
-                    onClick={() => {
-                      setCode("");
-                      setResult(null);
-                      setError("");
-                    }}
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-              <textarea
-                className="editor-card__textarea"
-                value={code}
-                onChange={(e) => {
-                  setCode(e.target.value);
-                  setResult(null);
-                }}
-                placeholder={`// Paste your ${language} code here…`}
-              />
-            </div>
 
-            {/* Error */}
-            {error && (
-              <div className="error-banner">
-                <span>⚠</span> {error}
-              </div>
-            )}
-
-            {/* Scan button + ML toggle */}
-            <div style={{ display: "flex", gap: 10, alignItems: "stretch" }}>
-              <button
-                className={`scan-btn ${scanning ? "scan-btn--scanning" : "scan-btn--ready"}`}
-                onClick={runScan}
-                disabled={scanning}
-              >
-                {scanning ? (
-                  <>
-                    <span
-                      style={{
-                        animation: "pulse 0.8s infinite",
-                        display: "inline-block",
-                      }}
-                    >
-                      ◉
-                    </span>{" "}
-                    Analyzing…
-                  </>
-                ) : (
-                  "▶  Start Detection"
-                )}
-              </button>
-              <button
-                className="ml-toggle"
-                onClick={toggleML}
-                title={
-                  mlEnabled
-                    ? "ML Tier 3 is enabled — click to disable"
-                    : "ML Tier 3 is disabled — click to enable"
-                }
-              >
-                <span
-                  className={`ml-toggle__dot${modelState.loading ? " ml-toggle__dot--loading" : modelState.ready ? " ml-toggle__dot--ready" : modelState.error ? " ml-toggle__dot--error" : ""}`}
-                />
-                <span className="ml-toggle__label">
-                  {modelState.loading
-                    ? "Loading…"
-                    : modelState.ready
-                      ? "ML On"
-                      : modelState.error
-                        ? "ML Err"
-                        : mlEnabled
-                          ? "ML"
-                          : "ML Off"}
-                </span>
-              </button>
-            </div>
-
-            {/* Results */}
-            {!scanning && result && (
-              <div className="fade-in">
-                <CodeViewer result={result} />
-                <div style={{ marginTop: 16 }}>
-                  <DetectionSummary groups={result.groups} />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* ── RIGHT SIDEBAR ──────────────────────────────────────── */}
-          <div className="main-right">
-            {/* Scanning state */}
-            {scanning && (
-              <div className="scanning-box scan-pulse">
-                <div className="scanning-box__header">
-                  <span
-                    style={{
-                      animation: "pulse 0.8s infinite",
-                      color: "var(--color-text-info)",
-                    }}
-                  >
-                    ◉
-                  </span>
-                  <span className="scanning-box__label">Scanning</span>
-                </div>
-                <ScanProgress stageIdx={stageIdx} />
-              </div>
-            )}
-
-            {/* Empty state */}
-            {!scanning && !result && (
-              <div className="sidebar-empty">
-                <div className="sidebar-empty__icon">⬡</div>
-                <p className="sidebar-empty__text">
-                  Paste code and hit
-                  <br />
-                  <strong style={{ color: "var(--color-text-info)" }}>
-                    Start Detection
-                  </strong>
-                  <br />
-                  to see results
-                </p>
-              </div>
-            )}
-
-            {/* Results */}
-            {!scanning && result && (
-              <div
-                className="fade-in"
-                style={{ display: "flex", flexDirection: "column", gap: 14 }}
-              >
-                <ScorePanel result={result} />
-
-                <TierBreakdown tiers={result.tiers} />
-
-                <MetricsPanel tiers={result.tiers} />
-
-                {/* Key signals */}
-                {(() => {
-                  const allSigs = result.groups.flatMap((g) => g.signals || []);
-                  const freq = {};
-                  allSigs.forEach((s) => {
-                    freq[s] = (freq[s] || 0) + 1;
-                  });
-                  const top = Object.entries(freq)
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 4)
-                    .map(([s]) => s);
-                  if (!top.length) return null;
-                  return (
-                    <div className="key-signals-card">
-                      <p className="card-label" style={{ marginBottom: 10 }}>
-                        Key Signals
-                      </p>
-                      {top.map((s, i) => (
-                        <div key={i} className="signal-row">
-                          <span className="signal-row__marker">›</span>
-                          <span className="signal-row__text">{s}</span>
-                        </div>
+                {/* Editor */}
+                <div className="editor-card">
+                  <div className="editor-card__titlebar">
+                    <div className="editor-card__dots">
+                      {["#ef4444", "#f59e0b", "#22c55e"].map((c) => (
+                        <div
+                          key={c}
+                          className="editor-card__dot"
+                          style={{ background: c }}
+                        />
                       ))}
                     </div>
-                  );
-                })()}
-
-                <div>
-                  <p className="card-label" style={{ marginBottom: 8 }}>
-                    Plain English
-                  </p>
-                  <PlainEnglishCard result={result} />
+                    <span className="editor-card__info">
+                      {language} · {code.split("\n").length} lines
+                    </span>
+                    <div className="editor-card__actions">
+                      <button
+                        className="editor-action editor-action--ai"
+                        onClick={() => loadExample("ai")}
+                      >
+                        AI Sample
+                      </button>
+                      <button
+                        className="editor-action editor-action--human"
+                        onClick={() => loadExample("human")}
+                      >
+                        Human Sample
+                      </button>
+                      <button
+                        className="editor-action editor-action--clear"
+                        onClick={() => {
+                          setCode("");
+                          setResult(null);
+                          setError("");
+                        }}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                  <textarea
+                    className="editor-card__textarea"
+                    value={code}
+                    onChange={(e) => {
+                      setCode(e.target.value);
+                      setResult(null);
+                    }}
+                    placeholder={`// Paste your ${language} code here…`}
+                  />
                 </div>
-              </div>
-            )}
-          </div>
-        </div>
 
-        {/* ── AI Plagiarism Comparison Results ─────────────────────── */}
-        {aiStep === "done" && aiPlagResult && (
-          <div className="ai-plag-results fade-in" ref={aiResultsRef}>
-            <h2 className="ai-plag-results__title">
-              🤖 AI Code Comparison Results
-            </h2>
+                {/* Error */}
+                {error && (
+                  <div className="error-banner">
+                    <span>⚠</span> {error}
+                  </div>
+                )}
 
-            {/* Max Similarity */}
-            {(() => {
-              const raw = (aiPlagResult.summary?.maxSimilarity ?? 0) * 100;
-              const pct = Math.min(Math.round(raw), 100);
-              return (
-                <div className="ai-plag-max-sim">
-                  <span className="ai-plag-max-sim__label">
-                    Max Similarity with AI Code
-                  </span>
-                  <span
-                    className={`ai-plag-max-sim__value ${pct >= 85 ? "high" : pct >= 60 ? "med" : "low"}`}
-                  >
-                    {pct}%
-                  </span>
-                </div>
-              );
-            })()}
-
-            {/* Side-by-side code comparison */}
-            <div className="ai-plag-code-compare">
-              <div className="ai-plag-card">
-                <div className="ai-plag-card__header">
-                  <span>AI-Generated Code ({language})</span>
+                {/* Scan button + ML toggle */}
+                <div
+                  style={{ display: "flex", gap: 10, alignItems: "stretch" }}
+                >
                   <button
-                    className="ai-plag-copy"
-                    onClick={() =>
-                      navigator.clipboard?.writeText(aiGeneratedCode)
+                    className={`scan-btn ${scanning ? "scan-btn--scanning" : "scan-btn--ready"}`}
+                    onClick={runScan}
+                    disabled={scanning}
+                  >
+                    {scanning ? (
+                      <>
+                        <span
+                          style={{
+                            animation: "pulse 0.8s infinite",
+                            display: "inline-block",
+                          }}
+                        >
+                          ◉
+                        </span>{" "}
+                        Analyzing…
+                      </>
+                    ) : (
+                      "▶  Start Detection"
+                    )}
+                  </button>
+                  <button
+                    className="ml-toggle"
+                    onClick={toggleML}
+                    title={
+                      mlEnabled
+                        ? "ML Tier 3 is enabled — click to disable"
+                        : "ML Tier 3 is disabled — click to enable"
                     }
                   >
-                    📋 Copy
+                    <span
+                      className={`ml-toggle__dot${modelState.loading ? " ml-toggle__dot--loading" : modelState.ready ? " ml-toggle__dot--ready" : modelState.error ? " ml-toggle__dot--error" : ""}`}
+                    />
+                    <span className="ml-toggle__label">
+                      {modelState.loading
+                        ? "Loading…"
+                        : modelState.ready
+                          ? "ML On"
+                          : modelState.error
+                            ? "ML Err"
+                            : mlEnabled
+                              ? "ML"
+                              : "ML Off"}
+                    </span>
                   </button>
                 </div>
-                <pre className="ai-plag-code">{aiGeneratedCode}</pre>
+
+                {/* Results */}
+                {!scanning && result && (
+                  <div className="fade-in">
+                    <CodeViewer result={result} />
+                    <div style={{ marginTop: 16 }}>
+                      <DetectionSummary groups={result.groups} />
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="ai-plag-card">
-                <div className="ai-plag-card__header">
-                  <span>Current Submission ({language})</span>
-                  <button
-                    className="ai-plag-copy"
-                    onClick={() => navigator.clipboard?.writeText(code)}
+
+              {/* ── RIGHT SIDEBAR ──────────────────────────────────────── */}
+              <div className="main-right">
+                {/* Scanning state */}
+                {scanning && (
+                  <div className="scanning-box scan-pulse">
+                    <div className="scanning-box__header">
+                      <span
+                        style={{
+                          animation: "pulse 0.8s infinite",
+                          color: "var(--color-text-info)",
+                        }}
+                      >
+                        ◉
+                      </span>
+                      <span className="scanning-box__label">Scanning</span>
+                    </div>
+                    <ScanProgress stageIdx={stageIdx} />
+                  </div>
+                )}
+
+                {/* Empty state */}
+                {!scanning && !result && (
+                  <div className="sidebar-empty">
+                    <div className="sidebar-empty__icon">⬡</div>
+                    <p className="sidebar-empty__text">
+                      Paste code and hit
+                      <br />
+                      <strong style={{ color: "var(--color-text-info)" }}>
+                        Start Detection
+                      </strong>
+                      <br />
+                      to see results
+                    </p>
+                  </div>
+                )}
+
+                {/* Results */}
+                {!scanning && result && (
+                  <div
+                    className="fade-in"
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 14,
+                    }}
                   >
-                    📋 Copy
-                  </button>
-                </div>
-                <pre className="ai-plag-code">{code}</pre>
+                    <ScorePanel result={result} />
+
+                    <TierBreakdown tiers={result.tiers} language={language} />
+
+                    <MetricsPanel tiers={result.tiers} />
+
+                    {/* Key signals */}
+                    {(() => {
+                      const allSigs = result.groups.flatMap(
+                        (g) => g.signals || [],
+                      );
+                      const freq = {};
+                      allSigs.forEach((s) => {
+                        freq[s] = (freq[s] || 0) + 1;
+                      });
+                      const top = Object.entries(freq)
+                        .sort((a, b) => b[1] - a[1])
+                        .slice(0, 4)
+                        .map(([s]) => s);
+                      if (!top.length) return null;
+                      return (
+                        <div className="key-signals-card">
+                          <p
+                            className="card-label"
+                            style={{ marginBottom: 10 }}
+                          >
+                            Key Signals
+                          </p>
+                          {top.map((s, i) => (
+                            <div key={i} className="signal-row">
+                              <span className="signal-row__marker">›</span>
+                              <span className="signal-row__text">{s}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+
+                    <div>
+                      <p className="card-label" style={{ marginBottom: 8 }}>
+                        Plain English
+                      </p>
+                      <PlainEnglishCard result={result} />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Scoring details */}
-            {aiPlagResult.final_decision && (
-              <div className="ai-plag-card">
-                <div className="ai-plag-card__header">
-                  <span>Scoring Details</span>
+            {/* ── AI Plagiarism Comparison Results ─────────────────────── */}
+            {aiStep === "done" && aiPlagResult && (
+              <div className="ai-plag-results fade-in" ref={aiResultsRef}>
+                <h2 className="ai-plag-results__title">
+                  🤖 AI Code Comparison Results
+                </h2>
+
+                {/* Layer 4 Similarity Score */}
+                {layer4Score !== null && (
+                  <div className="layer4-sim-card">
+                    <div className="ai-plag-max-sim">
+                      <span className="ai-plag-max-sim__label">
+                        Similarity to GPT-4 reference solution: {layer4Score}%
+                      </span>
+                      <span
+                        className={`ai-plag-max-sim__value ${layer4Score >= 85 ? "high" : layer4Score >= 60 ? "med" : "low"}`}
+                      >
+                        {layer4Score}%
+                      </span>
+                    </div>
+                    <p
+                      style={{
+                        color: "var(--color-text-tertiary)",
+                        fontSize: 11,
+                        fontFamily: "var(--font-mono)",
+                        margin: "6px 0 0",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      Compares token patterns, code structure, and logical
+                      approach against an AI-generated solution for this
+                      problem.
+                    </p>
+                  </div>
+                )}
+
+                {/* Side-by-side code comparison */}
+                <div className="ai-plag-code-compare">
+                  <div className="ai-plag-card">
+                    <div className="ai-plag-card__header">
+                      <span>AI-Generated Code ({language})</span>
+                      <button
+                        className="ai-plag-copy"
+                        onClick={() =>
+                          navigator.clipboard?.writeText(aiGeneratedCode)
+                        }
+                      >
+                        📋 Copy
+                      </button>
+                    </div>
+                    <pre className="ai-plag-code">{aiGeneratedCode}</pre>
+                  </div>
+                  <div className="ai-plag-card">
+                    <div className="ai-plag-card__header">
+                      <span>Current Submission ({language})</span>
+                      <button
+                        className="ai-plag-copy"
+                        onClick={() => navigator.clipboard?.writeText(code)}
+                      >
+                        📋 Copy
+                      </button>
+                    </div>
+                    <pre className="ai-plag-code">{code}</pre>
+                  </div>
                 </div>
-                <div style={{ padding: "12px 16px", fontSize: 13 }}>
-                  {aiPlagResult.final_decision.reasoning?.length > 0 && (
-                    <ul style={{ marginTop: 8, paddingLeft: 20 }}>
-                      {aiPlagResult.final_decision.reasoning.map((r, i) => (
-                        <li key={i}>{r}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
+
+                {/* Scoring details */}
+                {aiPlagResult.final_decision && (
+                  <div className="ai-plag-card">
+                    <div className="ai-plag-card__header">
+                      <span>Scoring Details</span>
+                    </div>
+                    <div style={{ padding: "12px 16px", fontSize: 13 }}>
+                      {aiPlagResult.final_decision.reasoning?.length > 0 && (
+                        <ul style={{ marginTop: 8, paddingLeft: 20 }}>
+                          {aiPlagResult.final_decision.reasoning.map((r, i) => (
+                            <li key={i}>{r}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Mode B — Adjustable weight sliders */}
+                {result && layer4Score !== null && (
+                  <div className="merged-score-card">
+                    <div
+                      className="merged-score-card__header"
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <span>Mode B — Combined Score</span>
+                      <button
+                        className="modeb-reset-btn"
+                        onClick={() => setModeBWeights({ ...MODE_B_DEFAULTS })}
+                      >
+                        Reset to defaults
+                      </button>
+                    </div>
+                    <div className="merged-score-card__body">
+                      <div
+                        className={`merged-score-card__gauge ${modeBFinal >= 70 ? "high" : modeBFinal >= 40 ? "med" : "low"}`}
+                      >
+                        {modeBFinal ?? "—"}%
+                      </div>
+                      <div className="merged-score-card__verdict">
+                        {modeBFinal >= 70
+                          ? "High probability this code is AI-generated."
+                          : modeBFinal >= 40
+                            ? "Moderate AI signals — review recommended."
+                            : "Low AI probability — likely human-written."}
+                      </div>
+
+                      <div className="modeb-sliders">
+                        {[
+                          {
+                            key: "t1",
+                            label: "Tier 1 (Heuristic)",
+                            score: result.tiers.tier1.score,
+                          },
+                          {
+                            key: "t2",
+                            label: "Tier 2 (Statistical)",
+                            score: result.tiers.tier2.score,
+                          },
+                          {
+                            key: "t3",
+                            label: "Tier 3 (ML)",
+                            score: result.tiers.tier3.available
+                              ? result.tiers.tier3.score
+                              : null,
+                          },
+                          {
+                            key: "layer4",
+                            label: "Layer 4 (Similarity)",
+                            score: layer4Score,
+                          },
+                        ].map(({ key, label, score }) => (
+                          <div key={key} className="modeb-slider-row">
+                            <div className="modeb-slider-row__header">
+                              <span className="modeb-slider-row__label">
+                                {label}
+                              </span>
+                              <span className="modeb-slider-row__pct">
+                                {Math.round(modeBWeights[key] * 100)}%
+                              </span>
+                              <span className="modeb-slider-row__score">
+                                {score !== null ? `${score}%` : "N/A"}
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min="0"
+                              max="60"
+                              value={Math.round(modeBWeights[key] * 100)}
+                              onChange={(e) =>
+                                adjustWeight(key, parseInt(e.target.value, 10))
+                              }
+                              className="modeb-slider"
+                              disabled={
+                                key === "t3" && !result.tiers.tier3.available
+                              }
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      <div
+                        className="merged-score-card__breakdown"
+                        style={{ marginTop: 12 }}
+                      >
+                        <div className="merged-score-card__row">
+                          <span className="merged-score-card__label">
+                            Tier 1
+                          </span>
+                          <span className="merged-score-card__weight">
+                            {Math.round(modeBWeights.t1 * 100)}%
+                          </span>
+                          <span className="merged-score-card__val">
+                            {result.tiers.tier1.score}%
+                          </span>
+                        </div>
+                        <div className="merged-score-card__row">
+                          <span className="merged-score-card__label">
+                            Tier 2
+                          </span>
+                          <span className="merged-score-card__weight">
+                            {Math.round(modeBWeights.t2 * 100)}%
+                          </span>
+                          <span className="merged-score-card__val">
+                            {result.tiers.tier2.score}%
+                          </span>
+                        </div>
+                        <div className="merged-score-card__row">
+                          <span className="merged-score-card__label">
+                            Tier 3
+                          </span>
+                          <span className="merged-score-card__weight">
+                            {Math.round(modeBWeights.t3 * 100)}%
+                          </span>
+                          <span className="merged-score-card__val">
+                            {result.tiers.tier3.available
+                              ? `${result.tiers.tier3.score}%`
+                              : "N/A"}
+                          </span>
+                        </div>
+                        <div className="merged-score-card__row">
+                          <span className="merged-score-card__label">
+                            Layer 4
+                          </span>
+                          <span className="merged-score-card__weight">
+                            {Math.round(modeBWeights.layer4 * 100)}%
+                          </span>
+                          <span className="merged-score-card__val">
+                            {layer4Score}%
+                          </span>
+                        </div>
+                        <div className="merged-score-card__divider" />
+                        <div className="merged-score-card__row merged-score-card__row--total">
+                          <span className="merged-score-card__label">
+                            Final Score
+                          </span>
+                          <span className="merged-score-card__weight" />
+                          <span className="merged-score-card__val">
+                            {modeBFinal ?? "—"}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
+          </>
+        )}
 
-            {/* Merge Score */}
-            {result && !mergedScore && (
-              <button
-                className="merge-score-btn"
-                onClick={() => {
-                  const aiDetection = result.overall_score;
-                  const aiSimilarityRaw =
-                    (aiPlagResult.summary?.maxSimilarity ?? 0) * 100;
-                  const aiSimilarity = Math.min(
-                    Math.round(aiSimilarityRaw),
-                    100,
-                  );
-                  const merged = Math.min(
-                    Math.round(aiDetection * 0.55 + aiSimilarity * 0.45),
-                    100,
-                  );
-                  setMergedScore({ merged, aiDetection, aiSimilarity });
-                }}
-              >
-                🔀 Merge Scores
-              </button>
-            )}
-
-            {mergedScore && (
-              <div className="merged-score-card">
-                <div className="merged-score-card__header">
-                  Combined AI Probability
-                </div>
-                <div className="merged-score-card__body">
-                  <div
-                    className={`merged-score-card__gauge ${mergedScore.merged >= 70 ? "high" : mergedScore.merged >= 40 ? "med" : "low"}`}
+        {/* ── AI Compare Modal ──────────────────────────────────────── */}
+        {showAiModal && (
+          <div
+            className="modal-overlay"
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !aiStep)
+                setShowAiModal(false);
+            }}
+          >
+            <div className="modal-card">
+              <div className="modal-card__header">
+                <h3>Layer 4 — AI Similarity Check</h3>
+                {!aiStep && (
+                  <button
+                    className="modal-close"
+                    onClick={() => setShowAiModal(false)}
                   >
-                    {mergedScore.merged}%
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {!aiStep && (
+                <div className="modal-card__body">
+                  <label className="modal-label">OpenAI API Key</label>
+                  <input
+                    type="password"
+                    className="modal-input"
+                    value={aiApiKey}
+                    onChange={(e) => {
+                      setAiApiKey(e.target.value);
+                      localStorage.setItem("aicd_openai_key", e.target.value);
+                    }}
+                    placeholder="sk-..."
+                  />
+
+                  <label className="modal-label" style={{ marginTop: 14 }}>
+                    Question / Prompt for ChatGPT
+                    <span
+                      style={{ fontSize: 11, color: "#94a3b8", marginLeft: 6 }}
+                    >
+                      (leave empty to reuse existing AI submission)
+                    </span>
+                  </label>
+                  <textarea
+                    className="modal-textarea"
+                    value={aiQuestion}
+                    onChange={(e) => setAiQuestion(e.target.value)}
+                    placeholder={`e.g., Write a ${language} function that computes the Fibonacci sequence…`}
+                    rows={5}
+                  />
+
+                  <div className="modal-meta">
+                    <span>
+                      Language: <strong>{language}</strong>
+                    </span>
+                    <span>
+                      Question ID:{" "}
+                      <strong>{submissionInfo?.questionId || "—"}</strong>
+                    </span>
+                    {submissionInfo?.examId && (
+                      <span>
+                        Exam ID: <strong>{submissionInfo.examId}</strong>
+                      </span>
+                    )}
+                    <span>
+                      AI Student: <strong>{AI_STUDENT_ID}</strong>
+                    </span>
                   </div>
-                  <div className="merged-score-card__verdict">
-                    {mergedScore.merged >= 70
-                      ? "High probability this code is AI-generated."
-                      : mergedScore.merged >= 40
-                        ? "Moderate AI signals — review recommended."
-                        : "Low AI probability — likely human-written."}
+
+                  <button
+                    className="modal-submit"
+                    disabled={!aiApiKey.trim()}
+                    onClick={handleAiCompare}
+                  >
+                    ▶ Compare
+                  </button>
+                </div>
+              )}
+
+              {aiStep && aiStep !== "done" && aiStep !== "error" && (
+                <div className="modal-card__body modal-progress">
+                  <div className="modal-step">
+                    <span
+                      className={`modal-step__dot ${aiStep === "generating" ? "active" : aiStep === "submitting" || aiStep === "checking" ? "done" : ""}`}
+                    />
+                    <span>Looking up / generating AI code…</span>
                   </div>
-                  <div className="merged-score-card__breakdown">
-                    <div className="merged-score-card__row">
-                      <span className="merged-score-card__label">
-                        AI Detection (heuristic + ML)
-                      </span>
-                      <span className="merged-score-card__weight">55%</span>
-                      <span className="merged-score-card__val">
-                        {mergedScore.aiDetection}%
-                      </span>
-                    </div>
-                    <div className="merged-score-card__row">
-                      <span className="merged-score-card__label">
-                        AI Code Similarity
-                      </span>
-                      <span className="merged-score-card__weight">45%</span>
-                      <span className="merged-score-card__val">
-                        {mergedScore.aiSimilarity}%
-                      </span>
-                    </div>
-                    <div className="merged-score-card__divider" />
-                    <div className="merged-score-card__row merged-score-card__row--total">
-                      <span className="merged-score-card__label">
-                        Merged Score
-                      </span>
-                      <span className="merged-score-card__weight" />
-                      <span className="merged-score-card__val">
-                        {mergedScore.merged}%
-                      </span>
-                    </div>
+                  <div className="modal-step">
+                    <span
+                      className={`modal-step__dot ${aiStep === "submitting" ? "active" : aiStep === "checking" ? "done" : ""}`}
+                    />
+                    <span>Saving AI code to database…</span>
+                  </div>
+                  <div className="modal-step">
+                    <span
+                      className={`modal-step__dot ${aiStep === "checking" ? "active" : ""}`}
+                    />
+                    <span>Comparing current code with AI code…</span>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+
+              {aiStep === "error" && (
+                <div className="modal-card__body">
+                  <div className="modal-error">
+                    <strong>Error:</strong> {aiError}
+                  </div>
+                  <button
+                    className="modal-submit"
+                    onClick={() => setAiStep(null)}
+                  >
+                    ← Try Again
+                  </button>
+                </div>
+              )}
+
+              {aiStep === "done" && (
+                <div className="modal-card__body">
+                  <div className="modal-success">✅ Comparison complete!</div>
+                  <button
+                    className="modal-submit"
+                    onClick={() => {
+                      setShowAiModal(false);
+                      setTimeout(
+                        () =>
+                          aiResultsRef.current?.scrollIntoView({
+                            behavior: "smooth",
+                            block: "start",
+                          }),
+                        100,
+                      );
+                    }}
+                  >
+                    View Results
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
-
-      {/* ── AI Compare Modal ──────────────────────────────────────── */}
-      {showAiModal && (
-        <div
-          className="modal-overlay"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !aiStep) setShowAiModal(false);
-          }}
-        >
-          <div className="modal-card">
-            <div className="modal-card__header">
-              <h3>🤖 Compare with AI-Generated Code</h3>
-              {!aiStep && (
-                <button
-                  className="modal-close"
-                  onClick={() => setShowAiModal(false)}
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-
-            {!aiStep && (
-              <div className="modal-card__body">
-                <label className="modal-label">OpenAI API Key</label>
-                <input
-                  type="password"
-                  className="modal-input"
-                  value={aiApiKey}
-                  onChange={(e) => {
-                    setAiApiKey(e.target.value);
-                    localStorage.setItem("aicd_openai_key", e.target.value);
-                  }}
-                  placeholder="sk-..."
-                />
-
-                <label className="modal-label" style={{ marginTop: 14 }}>
-                  Question / Prompt for ChatGPT
-                  <span
-                    style={{ fontSize: 11, color: "#94a3b8", marginLeft: 6 }}
-                  >
-                    (leave empty to reuse existing AI submission)
-                  </span>
-                </label>
-                <textarea
-                  className="modal-textarea"
-                  value={aiQuestion}
-                  onChange={(e) => setAiQuestion(e.target.value)}
-                  placeholder={`e.g., Write a ${language} function that computes the Fibonacci sequence…`}
-                  rows={5}
-                />
-
-                <div className="modal-meta">
-                  <span>
-                    Language: <strong>{language}</strong>
-                  </span>
-                  <span>
-                    Question ID:{" "}
-                    <strong>{submissionInfo?.questionId || "—"}</strong>
-                  </span>
-                  {submissionInfo?.examId && (
-                    <span>
-                      Exam ID: <strong>{submissionInfo.examId}</strong>
-                    </span>
-                  )}
-                  <span>
-                    AI Student: <strong>{AI_STUDENT_ID}</strong>
-                  </span>
-                </div>
-
-                <button
-                  className="modal-submit"
-                  disabled={!aiApiKey.trim()}
-                  onClick={handleAiCompare}
-                >
-                  ▶ Compare
-                </button>
-              </div>
-            )}
-
-            {aiStep && aiStep !== "done" && aiStep !== "error" && (
-              <div className="modal-card__body modal-progress">
-                <div className="modal-step">
-                  <span
-                    className={`modal-step__dot ${aiStep === "generating" ? "active" : aiStep === "submitting" || aiStep === "checking" ? "done" : ""}`}
-                  />
-                  <span>Looking up / generating AI code…</span>
-                </div>
-                <div className="modal-step">
-                  <span
-                    className={`modal-step__dot ${aiStep === "submitting" ? "active" : aiStep === "checking" ? "done" : ""}`}
-                  />
-                  <span>Saving AI code to database…</span>
-                </div>
-                <div className="modal-step">
-                  <span
-                    className={`modal-step__dot ${aiStep === "checking" ? "active" : ""}`}
-                  />
-                  <span>Comparing current code with AI code…</span>
-                </div>
-              </div>
-            )}
-
-            {aiStep === "error" && (
-              <div className="modal-card__body">
-                <div className="modal-error">
-                  <strong>Error:</strong> {aiError}
-                </div>
-                <button
-                  className="modal-submit"
-                  onClick={() => setAiStep(null)}
-                >
-                  ← Try Again
-                </button>
-              </div>
-            )}
-
-            {aiStep === "done" && (
-              <div className="modal-card__body">
-                <div className="modal-success">✅ Comparison complete!</div>
-                <button
-                  className="modal-submit"
-                  onClick={() => {
-                    setShowAiModal(false);
-                    setTimeout(
-                      () =>
-                        aiResultsRef.current?.scrollIntoView({
-                          behavior: "smooth",
-                          block: "start",
-                        }),
-                      100,
-                    );
-                  }}
-                >
-                  View Results
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

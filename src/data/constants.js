@@ -1,7 +1,6 @@
 // ─── Languages ────────────────────────────────────────────────────────────────
 export const LANGUAGES = [
-  "JavaScript", "TypeScript", "Python", "Java",
-  "C++", "Go", "Rust", "PHP", "Ruby", "Swift", "Kotlin", "C#",
+  "Python", "JavaScript", "Java", "C++", "C", "C#",
 ];
 
 // ─── Scan stage labels (shown during analysis animation) ─────────────────────

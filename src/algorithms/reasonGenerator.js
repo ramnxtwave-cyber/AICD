@@ -87,47 +87,52 @@ export function buildOverallExplanation(result) {
   const m1 = tiers?.tier1?.metrics || {};
   const m2 = tiers?.tier2?.metrics || {};
   const m3 = tiers?.tier3;
+  const bypass = tiers?.tier1?.bypass;
 
   const aiEvidence = [];
   const humanEvidence = [];
 
-  // Tier 1 evidence
-  if (m1.type_annotations > 60)
-    aiEvidence.push("every function has full type annotations");
-  if (m1.docstring_coverage > 80)
-    aiEvidence.push("every method has a docstring including trivial ones");
+  // Bypass flag evidence (highest priority)
+  if (bypass?.triggered) {
+    if (bypass.reasons.includes('type_annotations'))
+      aiEvidence.push("type annotations detected — extremely rare in timed exams");
+    if (bypass.reasons.includes('docstring_present'))
+      aiEvidence.push("docstrings present — no one writes these under exam pressure");
+    if (bypass.reasons.includes('emoji_present'))
+      aiEvidence.push("emojis found in the code — a strong AI hallmark");
+  }
+
+  // Tier 1 active signal evidence
+  if (m1.naming_verbosity > 70)
+    aiEvidence.push("long descriptive variable names throughout");
+  if (m1.dead_code_absence > 65)
+    aiEvidence.push("no commented-out code or scratch work anywhere");
+  if (m1.variable_reuse > 70)
+    aiEvidence.push("every intermediate value gets a fresh named variable");
   if (m1.structural_regularity > 70)
     aiEvidence.push(
-      "all methods follow an identical def→types→docstring structure",
+      "all methods follow an identical canonical structure",
     );
-  if (m1.blank_density > 60)
-    aiEvidence.push("blank lines between almost every statement");
   if (m1.exception_handling > 70)
     aiEvidence.push("broad 'except Exception as e' pattern throughout");
   if (m1.import_organisation > 70)
     aiEvidence.push(
       "imports are perfectly organised by stdlib → third-party → local",
     );
-  if (m1.complexity_uniformity > 70)
-    aiEvidence.push("all functions have suspiciously similar complexity");
-  if (m1.variable_reuse < 30)
-    aiEvidence.push("every intermediate value gets a fresh named variable");
-  if (m1.comment_absence > 70)
-    aiEvidence.push("zero informal inline comments anywhere in the file");
-  if (m1.emoji_presence > 50)
-    aiEvidence.push("emojis found in the code — a strong AI hallmark");
 
   // Tier 1 human evidence
-  if (m1.variable_reuse > 60)
+  if (m1.variable_reuse < 35)
     humanEvidence.push("variables are reused and reassigned naturally");
   if (m1.dead_code_absence < 40)
-    humanEvidence.push("commented-out code or debug prints are present");
+    humanEvidence.push("commented-out code or scratch work is present");
   if (m1.magic_numbers < 30)
     humanEvidence.push(
       "magic numbers are used inline rather than named constants",
     );
   if (100 - m1.type_token_ratio < 35)
     humanEvidence.push("vocabulary is varied and informal");
+  if (m1.naming_verbosity < 25)
+    humanEvidence.push("short abbreviated variable names — typed under pressure");
 
   // Tier 2 evidence
   if (m2.log_rank > 65)
@@ -155,13 +160,14 @@ export function buildOverallExplanation(result) {
       ? `The clearest indicators are: ${top.join("; ")}. ${t3Label ? t3Label + "." : ""} ${aiGroups} section${aiGroups !== 1 ? "s" : ""} of the code triggered AI signals.`
       : `The overall structure, naming, and documentation is too polished and uniform for typical human authorship.`;
     suggestions = [
-      m1.emoji_presence > 50 &&
+      bypass?.reasons?.includes('emoji_present') &&
         "Remove emojis from comments, logs, and strings — they are a dead giveaway",
-      m1.type_annotations > 60 &&
-        "Remove type annotations from simpler or private methods",
-      m1.docstring_coverage > 80 &&
-        "Skip or shorten docstrings on trivial methods",
-      m1.blank_density > 60 && "Remove some blank lines between statements",
+      bypass?.reasons?.includes('type_annotations') &&
+        "Remove type annotations — no one adds these in a timed exam",
+      bypass?.reasons?.includes('docstring_present') &&
+        "Remove docstrings — no one writes these under exam pressure",
+      m1.naming_verbosity > 70 &&
+        "Use shorter variable names — humans abbreviate under pressure",
       m1.exception_handling > 70 &&
         "Replace broad 'except Exception' with specific error types",
     ]

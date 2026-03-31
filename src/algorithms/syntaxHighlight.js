@@ -2,7 +2,7 @@
  * algorithms/syntaxHighlight.js
  *
  * Tokenises a single line of code into coloured segments.
- * Supports Python, JS/TS, Java, Go, Rust, and other C-family languages.
+ * Supports Python, JavaScript, Java, C++, C, and C#.
  * Returns an array of { text, type } objects — no JSX, no DOM.
  */
 
@@ -16,10 +16,10 @@ const KEYWORDS = new Set([
   "const","let","var","function","new","this","typeof","instanceof",
   "null","undefined","true","false","export","default","of","switch","case",
   "throw","catch","interface","type","enum","extends","implements",
-  // Java / C# / Go / Rust
+  // Java / C# / C / C++
   "public","private","protected","static","void","int","boolean","string",
-  "String","bool","float","double","long","char","struct","fn","mut","use",
-  "mod","impl","trait","pub","let","match","do","package","import",
+  "String","bool","float","double","long","char","struct","do",
+  "namespace","using","internal","sealed","readonly","foreach","import",
 ]);
 
 const KW_RE   = /\b[A-Za-z_]\w*\b/g;
