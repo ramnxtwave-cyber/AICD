@@ -16,7 +16,7 @@
 
 const API_URL =
   import.meta.env.VITE_API_URL ||
-  "https://augustus-dishevelled-janessa.ngrok-free.dev/api";
+  "https://web-production-3df18.up.railway.app/api";
 const TIMEOUT_MS = 30_000;
 
 let backendReady = false;
@@ -95,7 +95,10 @@ export function getModelState() {
  * }
  */
 export async function mlClassify(code, language = "Python") {
-  onStatusChange({ stage: "classifying", message: "Running backend analysis…" });
+  onStatusChange({
+    stage: "classifying",
+    message: "Running backend analysis…",
+  });
 
   try {
     const res = await fetchWithTimeout(`${API_URL}/analyze`, {
